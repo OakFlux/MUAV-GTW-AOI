@@ -1,7 +1,7 @@
 # Experimental Data Package
 
 **Manuscript title:**  
-*Freshness- and Service-Aware Multi-UAV IoT Data Collection via Joint Age of Information and Grey Time Window Optimization*
+*Multi-Objective Multi-UAV IoT Data Collection under Age of Information and Grey Time Window Preferences*
 
 This repository provides the experimental data associated with a manuscript currently under review.
 
