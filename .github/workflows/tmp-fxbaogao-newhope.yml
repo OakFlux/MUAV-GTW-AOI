@@ -1,0 +1,80 @@
+name: Temporary inspect FXBaogao New Hope Service report
+
+on:
+  push:
+    branches:
+      - tmp/fxbaogao-newhope-20260828
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch page and discover original PDF
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p output
+          URL=https://www.fxbaogao.com/detail/5488726
+          curl -4 -k -L --http1.1 --connect-timeout 8 --max-time 35 -A 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131 Safari/537.36' -D output/page.headers -o output/page.html "$URL" || true
+          echo 'PAGE FILE'; ls -lh output/page.html; head -c 500 output/page.html; echo
+          python - <<'PY'
+          import json,re,urllib.parse,urllib3
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+          p=Path('output/page.html')
+          if not p.exists(): raise SystemExit
+          html=p.read_text(errors='ignore')
+          print('HTML_LEN',len(html))
+          needles=['5488726','新希望服务','高派息构筑安全垫','pdf','download','sourceurl','originalurl','fileurl','reporturl','infocode','attachment','oss','cos','cdn','api/']
+          low=html.lower()
+          for nd in needles:
+            pos=0;n=0
+            while n<12:
+              i=low.find(nd.lower(),pos)
+              if i<0:break
+              print('CTX',nd,html[max(0,i-450):i+850].replace('\n',' ')[:1300])
+              pos=i+len(nd);n+=1
+          print('AP_CODES',sorted(set(re.findall(r'AP\d{12,24}',html))))
+          print('PDF_URLS',sorted(set(re.findall(r'https?://[^\"\'<> ]+\.pdf(?:\?[^\"\'<> ]*)?',html,re.I))))
+          soup=BeautifulSoup(html,'html.parser')
+          S=requests.Session();S.headers.update({'User-Agent':'Mozilla/5.0','Referer':'https://www.fxbaogao.com/'})
+          scripts=[]
+          for s in soup.find_all('script',src=True): scripts.append(urllib.parse.urljoin('https://www.fxbaogao.com/',s['src']))
+          print('SCRIPTS',len(scripts),scripts)
+          for idx,u in enumerate(scripts[:60]):
+            try:
+              r=S.get(u,timeout=25,verify=False)
+              txt=r.text
+              hits=[nd for nd in needles if nd.lower() in txt.lower()]
+              if hits:
+                Path(f'output/script_{idx:02d}.js').write_bytes(r.content)
+                print('SCRIPT_HIT',idx,r.status_code,len(r.content),u,hits)
+                lo=txt.lower()
+                for nd in hits:
+                  i=lo.find(nd.lower())
+                  print('SCTX',nd,txt[max(0,i-500):i+1000].replace('\n',' ')[:1500])
+            except Exception as e: print('SCRIPTERR',idx,u,e)
+          # Extract inline JSON and recursively print URL-ish values.
+          for i,s in enumerate(soup.find_all('script')):
+            txt=s.string or s.get_text() or ''
+            if not txt: continue
+            if any(nd.lower() in txt.lower() for nd in ['5488726','新希望服务','pdf','download','sourceurl']):
+              Path(f'output/inline_{i}.js').write_text(txt,encoding='utf-8',errors='ignore')
+              print('INLINE_HIT',i,len(txt),txt[:2000])
+          PY
+          find output -type f -maxdepth 1 -printf '%f %s\n' | sort
+      - name: Upload inspection
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fxbaogao-newhope-inspection
+          path: output/
+          retention-days: 2
+          if-no-files-found: warn
