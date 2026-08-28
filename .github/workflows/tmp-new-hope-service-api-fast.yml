@@ -1,0 +1,94 @@
+name: Temporary fast fetch New Hope Service reports
+
+on:
+  push:
+    branches:
+      - tmp/new-hope-service-api-fast-20260828
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch exact report and related metadata
+        shell: bash
+        run: |
+          python -m pip install --quiet requests pypdf
+          python - <<'PY'
+          import io,json,re,requests,hashlib,datetime
+          from pathlib import Path
+          from pypdf import PdfReader
+          API='https://api.reportify.cn'; ID='1105126013194604544'; O=Path('output');O.mkdir(exist_ok=True)
+          S=requests.Session();S.headers.update({'User-Agent':'Mozilla/5.0','Origin':'https://reportify.cn','Referer':'https://reportify.cn/reports/'+ID,'Accept':'application/json,text/plain,*/*'})
+          def gj(path,params=None):
+            r=S.get(API+path,params=params,timeout=25);print('GET',r.status_code,len(r.content),r.url,r.text[:500].replace('\n',' '));
+            try:return r.json()
+            except:return None
+          detail=gj('/reports/'+ID); down=gj('/reports/'+ID+'/download')
+          queries=[
+            {'company_ticker':'03658','page_num':1,'page_size':100},
+            {'symbol':'HK:03658','page_num':1,'page_size':100},
+            {'query':'新希望服务','page_num':1,'page_size':100},
+            {'institution_id':'8518961636966406','page_num':1,'page_size':200},
+          ]
+          payloads=[]
+          for q in queries: payloads.append((q,gj('/reports',q)))
+          found={ID:detail}
+          def walk(x):
+            if isinstance(x,dict):
+              blob=json.dumps(x,ensure_ascii=False).lower();rid=x.get('report_id') or x.get('id')
+              if rid and ('新希望服务' in blob or 'new hope service' in blob or '"ticker": "03658"' in blob or 'hk:03658' in blob):found[str(rid)]=x
+              for v in x.values():walk(v)
+            elif isinstance(x,list):
+              for v in x:walk(v)
+          for _,p in payloads:walk(p)
+          print('FOUND',json.dumps(found,ensure_ascii=False,indent=2)[:30000])
+          def data(x):return x.get('data') if isinstance(x,dict) and 'data'in x else x
+          def urls(x):
+            z=[]
+            def w(v):
+              if isinstance(v,str) and v.startswith('http'):z.append(v)
+              elif isinstance(v,dict):
+                for k,a in v.items():
+                  if isinstance(a,str) and a.startswith('http') and any(n in k.lower() for n in ['url','pdf','download','file','content','source']):z.insert(0,a)
+                  else:w(a)
+              elif isinstance(v,list):
+                for a in v:w(a)
+            w(x);return list(dict.fromkeys(z))
+          valid=[];hs=set()
+          for rid,row in found.items():
+            d=data(gj('/reports/'+rid)) or data(row) or {}; dl=gj('/reports/'+rid+'/download');us=urls(dl)+urls(d);print('URLS',rid,us)
+            for u in us:
+              try:r=S.get(u,timeout=60,allow_redirects=True,headers={'User-Agent':'Mozilla/5.0','Referer':'https://reportify.cn/'});print('PDF?',r.status_code,len(r.content),r.headers.get('content-type'),r.url)
+              except Exception as e:print('ERR',e);continue
+              if r.status_code!=200 or r.content[:5]!=b'%PDF-' or len(r.content)<80000:continue
+              h=hashlib.sha256(r.content).hexdigest()
+              if h in hs:continue
+              try:
+                pr=PdfReader(io.BytesIO(r.content),strict=False);pages=len(pr.pages);text=''.join((pr.pages[i].extract_text()or'') for i in range(min(5,pages)));c=re.sub(r'\s+','',text).lower()
+                if '新希望服务' not in c and 'newhopeservice' not in c and not re.search(r'(?<!\d)0?3658(?!\d)',c):continue
+              except Exception as e:print('PARSE',e);continue
+              hs.add(h);title=d.get('title')or d.get('report_title')or row.get('title')or row.get('report_title')or rid;broker=d.get('institution_name')or row.get('institution_name')or'券商';pub=d.get('publish_at')or row.get('publish_at');date=''
+              if isinstance(pub,(int,float)):date=datetime.datetime.fromtimestamp(pub/1000,datetime.timezone.utc).date().isoformat()
+              valid.append({'rid':rid,'title':title,'broker':broker,'date':date,'pages':pages,'url':r.url,'content':r.content,'hash':h});break
+          print('VALID',json.dumps([{k:v for k,v in x.items()if k!='content'}for x in valid],ensure_ascii=False,indent=2))
+          if not valid:raise RuntimeError('no pdf')
+          man=[]
+          for i,x in enumerate(valid[:3],1):
+            fn=re.sub(r'[\\/:*?"<>|]+','_',f"{i:02d}_{x['broker']}_{x['title']}_{x['date'].replace('-','')or'未知日期'}_{x['pages']}页.pdf")
+            (O/fn).write_bytes(x['content']);man.append({k:v for k,v in x.items()if k!='content'}|{'filename':fn})
+          (O/'manifest.json').write_text(json.dumps(man,ensure_ascii=False,indent=2),encoding='utf-8')
+          (O/'报告清单.txt').write_text('\n\n'.join(f"{i}. {x['broker']}：《{x['title']}》\n日期：{x['date']}；页数：{x['pages']}页\n文件：{x['filename']}"for i,x in enumerate(man,1)),encoding='utf-8')
+          PY
+          ls -lh output
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: new-hope-service-fast-reports
+          path: output/
+          retention-days: 3
+          if-no-files-found: error
