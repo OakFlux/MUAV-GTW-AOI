@@ -37,168 +37,214 @@ const context = await browser.newContext({
 });
 
 async function dismissResearchDisclaimer(page) {
-  const selectors = [
-    'button:has-text("Accept")',
-    'a:has-text("Accept")',
-    '[role="button"]:has-text("Accept")',
-    'button:has-text("I Accept")',
-    'a:has-text("I Accept")'
-  ];
-
-  for (const selector of selectors) {
-    const candidates = page.locator(selector);
-    const count = await candidates.count();
-    for (let i = 0; i < count; i++) {
-      const el = candidates.nth(i);
-      const text = ((await el.innerText().catch(() => '')) || '').trim();
-      if (!/^I?\s*Accept$/i.test(text)) continue;
-      if (await el.isVisible().catch(() => false)) {
-        await el.click({ force: true }).catch(() => {});
-        await page.waitForTimeout(1500);
-        break;
-      }
+  const accept = page.locator('button, a, [role="button"]').filter({ hasText: /^\s*(?:I\s*)?Accept\s*$/i });
+  for (let i = 0; i < await accept.count(); i++) {
+    const el = accept.nth(i);
+    if (await el.isVisible().catch(() => false)) {
+      await el.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(1200);
+      break;
     }
   }
 
   await page.evaluate(() => {
-    const titleNodes = Array.from(document.querySelectorAll('body *')).filter((el) =>
-      (el.textContent || '').trim() === 'DBS Research Disclaimer'
-    );
-
-    for (const title of titleNodes) {
+    const normalize = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const titles = Array.from(document.querySelectorAll('body *')).filter((el) => normalize(el.textContent) === 'DBS Research Disclaimer');
+    for (const title of titles) {
       let node = title;
-      let candidate = null;
-      for (let depth = 0; depth < 8 && node && node !== document.body; depth++, node = node.parentElement) {
+      let removeNode = null;
+      for (let depth = 0; depth < 9 && node && node !== document.body; depth++, node = node.parentElement) {
+        const text = normalize(node.textContent);
         const style = getComputedStyle(node);
         const rect = node.getBoundingClientRect();
-        const text = node.textContent || '';
         if (text.includes('DBS Research Disclaimer') && text.includes('Accept') &&
             (style.position === 'fixed' || style.position === 'absolute' || rect.width > innerWidth * 0.35)) {
-          candidate = node;
+          removeNode = node;
         }
       }
-      if (candidate && candidate !== document.body) candidate.remove();
+      if (removeNode && removeNode !== document.body) removeNode.remove();
     }
-
     for (const el of Array.from(document.querySelectorAll('body *'))) {
       const style = getComputedStyle(el);
       const rect = el.getBoundingClientRect();
       const z = Number.parseInt(style.zIndex || '0', 10) || 0;
-      const coversScreen = rect.width >= innerWidth * 0.85 && rect.height >= innerHeight * 0.85;
-      const mostlyEmpty = (el.textContent || '').trim().length < 80;
-      if (style.position === 'fixed' && coversScreen && z >= 10 && mostlyEmpty) el.remove();
+      if (style.position === 'fixed' && rect.width >= innerWidth * 0.85 && rect.height >= innerHeight * 0.85 &&
+          z >= 10 && normalize(el.textContent).length < 80) el.remove();
     }
-
     document.documentElement.style.overflow = 'auto';
     document.body.style.overflow = 'auto';
     document.body.classList.remove('modal-open', 'overflow-hidden', 'no-scroll');
   });
-
-  await page.waitForTimeout(500);
-  const visible = await page.locator('text=DBS Research Disclaimer').evaluateAll((els) =>
-    els.some((el) => {
-      const s = getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity || 1) > 0 && r.width > 0 && r.height > 0;
-    })
-  ).catch(() => false);
-  if (visible) throw new Error('DBS Research Disclaimer dialog is still visible after dismissal');
 }
 
 async function expandFullArticle(page) {
-  let lastLength = 0;
-  for (let round = 0; round < 5; round++) {
-    const before = (await page.locator('body').innerText()).length;
-    const candidates = page.locator('a, button, [role="button"]').filter({ hasText: /Read\s*More/i });
-    const count = await candidates.count();
+  for (let round = 0; round < 4; round++) {
+    const controls = page.locator('a, button, [role="button"], span').filter({ hasText: /^\s*Read\s*More\s*$/i });
     let clicked = false;
-    for (let i = 0; i < count; i++) {
-      const el = candidates.nth(i);
-      const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-      if (!/^Read\s*More/i.test(text)) continue;
+    for (let i = 0; i < await controls.count(); i++) {
+      const el = controls.nth(i);
       if (await el.isVisible().catch(() => false)) {
         await el.scrollIntoViewIfNeeded().catch(() => {});
         await el.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(900);
         clicked = true;
-        await page.waitForTimeout(1200);
         break;
       }
     }
-    const after = (await page.locator('body').innerText()).length;
-    console.log(`Article expansion round ${round + 1}: ${before} -> ${after} characters; clicked=${clicked}`);
-    if (!clicked || after <= lastLength + 20) break;
-    lastLength = after;
+    if (!clicked) break;
   }
+}
 
-  // Some versions implement the fold purely through CSS rather than a click handler.
-  await page.evaluate(() => {
-    const readMoreNodes = Array.from(document.querySelectorAll('a, button, [role="button"], span')).filter((el) =>
-      /^Read\s*More/i.test((el.textContent || '').replace(/\s+/g, ' ').trim())
-    );
-    for (const control of readMoreNodes) {
-      let p = control.parentElement;
-      for (let depth = 0; depth < 6 && p; depth++, p = p.parentElement) {
-        const style = getComputedStyle(p);
-        if (style.maxHeight !== 'none' || style.overflow === 'hidden') {
-          p.style.maxHeight = 'none';
-          p.style.height = 'auto';
-          p.style.overflow = 'visible';
-        }
+async function extractCleanArticle(page) {
+  return await page.evaluate(() => {
+    const normalize = (s) => (s || '').replace(/\s+/g, ' ').trim();
+    const companyRe = /K\.?\s*Wah International/i;
+    const nodes = Array.from(document.querySelectorAll('article, main, section, div'));
+    const candidates = nodes.map((el) => ({
+      el,
+      text: normalize(el.textContent),
+      visibleText: normalize(el.innerText)
+    })).filter(({ text }) => companyRe.test(text) && text.length >= 3000 && text.length <= 30000);
+
+    candidates.sort((a, b) => {
+      const aNoise = /About Us|Quick Links|Web Conditions of Use/.test(a.text) ? 1 : 0;
+      const bNoise = /About Us|Quick Links|Web Conditions of Use/.test(b.text) ? 1 : 0;
+      return aNoise - bNoise || a.text.length - b.text.length;
+    });
+
+    const root = candidates[0]?.el || document.querySelector('main') || document.body;
+    const sourceText = normalize(root.textContent);
+    if (!companyRe.test(sourceText) || sourceText.length < 3000) {
+      throw new Error(`Could not isolate full article; root text length=${sourceText.length}`);
+    }
+
+    const clone = root.cloneNode(true);
+    clone.querySelectorAll('script, style, noscript, iframe, video, audio, canvas, nav, footer, form, input, textarea, select, button').forEach((el) => el.remove());
+
+    const removeExact = [
+      /^Read More$/i,
+      /^Read Less$/i,
+      /^Print$/i,
+      /^Have a question\?$/i,
+      /^Yes, Contact me$/i,
+      /^Related Stories$/i,
+      /^Market Insights$/i,
+      /^Login$/i
+    ];
+    const removeStarts = [
+      /^About Us$/i,
+      /^Quick Links$/i,
+      /^Other hotlines$/i,
+      /^Web Conditions of Use$/i
+    ];
+
+    for (const el of Array.from(clone.querySelectorAll('*'))) {
+      const text = normalize(el.textContent);
+      if ((removeExact.some((re) => re.test(text)) || removeStarts.some((re) => re.test(text))) && text.length < 120) {
+        const parent = el.parentElement;
+        if (parent && normalize(parent.textContent).length < 500) parent.remove();
+        else el.remove();
+        continue;
       }
-      control.style.display = 'none';
+      el.removeAttribute('class');
+      el.removeAttribute('id');
+      el.removeAttribute('style');
+      el.removeAttribute('hidden');
+      el.removeAttribute('aria-hidden');
+      el.removeAttribute('role');
+      if (el.tagName === 'A') {
+        el.removeAttribute('href');
+        el.removeAttribute('target');
+      }
+      if (el.tagName === 'IMG') {
+        const src = el.getAttribute('src') || '';
+        if (!src || /logo|icon|arrow|social|avatar/i.test(src)) el.remove();
+      }
     }
-    for (const el of Array.from(document.querySelectorAll('[style*="max-height"], [class*="collapse" i], [class*="expand" i], [class*="readmore" i], [class*="read-more" i]'))) {
-      el.style.maxHeight = 'none';
-      el.style.height = 'auto';
-      el.style.overflow = 'visible';
-      el.classList.add('show', 'open', 'expanded');
+
+    // Remove tiny or empty remnants produced by the site's navigation widgets.
+    for (const el of Array.from(clone.querySelectorAll('div, span, a'))) {
+      const text = normalize(el.textContent);
+      if (!text && el.querySelectorAll('img, table').length === 0) el.remove();
     }
+
+    return {
+      html: clone.innerHTML,
+      text: sourceText,
+      rootTag: root.tagName,
+      rootLength: sourceText.length
+    };
   });
-  await page.waitForTimeout(500);
 }
 
 for (const report of reports) {
-  const page = await context.newPage();
+  const sourcePage = await context.newPage();
   console.log(`Opening ${report.url}`);
-  await page.goto(report.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  await page.waitForTimeout(5000);
-  try { await page.waitForLoadState('networkidle', { timeout: 30000 }); } catch {}
+  await sourcePage.goto(report.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await sourcePage.waitForTimeout(4500);
+  try { await sourcePage.waitForLoadState('networkidle', { timeout: 20000 }); } catch {}
 
-  await dismissResearchDisclaimer(page);
-  await expandFullArticle(page);
+  await dismissResearchDisclaimer(sourcePage);
+  await expandFullArticle(sourcePage);
+  const article = await extractCleanArticle(sourcePage);
+  console.log(`Extracted article from ${article.rootTag}; ${article.rootLength} characters`);
+  if (article.rootLength < 3000) throw new Error(`Article extraction too short for ${report.url}`);
 
-  const title = (await page.title()).trim();
-  const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-  if (!/K\.?\s*Wah International/i.test(bodyText) || bodyText.length < 3200) {
-    throw new Error(`Full article validation failed for ${report.url}; title=${title}; body chars=${bodyText.length}`);
+  const printPage = await context.newPage();
+  const cleanHtml = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><base href="${report.url}">
+<style>
+  @page { size: A4; margin: 16mm 14mm 17mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: white; color: #1a1a1a; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.4pt; line-height: 1.52; }
+  .source-banner { border-bottom: 2px solid #d62027; padding-bottom: 8px; margin-bottom: 18px; }
+  .source-banner .brand { font-size: 9pt; color: #666; letter-spacing: .2px; }
+  .source-banner h1 { font-size: 20pt; line-height: 1.2; margin: 5px 0 6px; color: #111; }
+  .source-banner .meta { font-size: 9.5pt; color: #555; }
+  #article h1, #article h2, #article h3, #article h4 { color: #202020; break-after: avoid; }
+  #article h1 { font-size: 18pt; margin: 14px 0 8px; }
+  #article h2 { font-size: 14pt; margin: 16px 0 7px; }
+  #article h3, #article h4 { font-size: 11.5pt; margin: 13px 0 5px; }
+  #article p { margin: 0 0 8px; orphans: 3; widows: 3; }
+  #article ul, #article ol { margin: 5px 0 10px 21px; padding: 0; }
+  #article li { margin: 0 0 4px; }
+  #article table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 10px 0 14px; page-break-inside: auto; }
+  #article th, #article td { border: 1px solid #c9c9c9; padding: 5px 6px; vertical-align: top; }
+  #article th { background: #f0f0f0; }
+  #article img { display: block; max-width: 100%; height: auto; margin: 8px auto; }
+  #article br { line-height: 1.2; }
+  #article a { color: inherit; text-decoration: none; }
+  .source-note { margin-top: 16px; padding-top: 8px; border-top: 1px solid #bbb; font-size: 8.5pt; color: #666; }
+</style></head><body>
+<section class="source-banner">
+  <div class="brand">DBS Equity Research - K. Wah International Holdings Limited (00173.HK)</div>
+  <h1>${report.title.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</h1>
+  <div class="meta">Publication date: ${report.date} | Official public DBS research page</div>
+</section>
+<main id="article">${article.html}</main>
+<div class="source-note">Source preserved from the official DBS public research page. Copyright remains with DBS and the original publisher.</div>
+</body></html>`;
+
+  await printPage.setContent(cleanHtml, { waitUntil: 'domcontentloaded' });
+  await printPage.waitForTimeout(1000);
+  await printPage.evaluate(() => document.fonts?.ready);
+
+  const printText = (await printPage.locator('body').innerText()).replace(/\s+/g, ' ').trim();
+  if (!/K\.?\s*Wah International/i.test(printText) || printText.length < 3000) {
+    throw new Error(`Clean print page validation failed; text chars=${printText.length}`);
   }
 
-  await page.emulateMedia({ media: 'screen' });
-  await page.addStyleTag({ content: `
-    @media print {
-      html, body { overflow: visible !important; height: auto !important; }
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      header, footer, nav, [class*="cookie" i], [id*="cookie" i], [class*="breadcrumb" i],
-      [class*="chat" i], [class*="contact" i], [class*="related" i], [class*="offer" i],
-      [class*="login" i], [class*="navigation" i], [class*="modal" i], [class*="overlay" i],
-      [class*="backdrop" i], [class*="footer" i], [id*="footer" i], [role="dialog"] { display: none !important; }
-      [style*="max-height"], [class*="collapse" i], [class*="readmore" i], [class*="read-more" i] {
-        max-height: none !important; height: auto !important; overflow: visible !important;
-      }
-      a { color: inherit !important; text-decoration: none !important; }
-    }
-  `});
-
   const pdfPath = path.join(pdfDir, report.filename);
-  await page.pdf({
+  await printPage.pdf({
     path: pdfPath,
     format: 'A4',
     printBackground: true,
-    preferCSSPageSize: false,
+    preferCSSPageSize: true,
     displayHeaderFooter: true,
-    headerTemplate: `<div style="font-size:8px;width:100%;text-align:center;color:#666;">DBS Research - K. Wah International (00173.HK) - ${report.date}</div>`,
+    headerTemplate: '<div></div>',
     footerTemplate: '<div style="font-size:8px;width:100%;text-align:center;color:#777;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>',
-    margin: { top: '18mm', bottom: '16mm', left: '12mm', right: '12mm' }
+    margin: { top: '10mm', bottom: '14mm', left: '0mm', right: '0mm' }
   });
 
   const stat = await fs.stat(pdfPath);
@@ -208,8 +254,10 @@ for (const report of reports) {
   fsSync.readSync(fd, head, 0, 5, 0);
   fsSync.closeSync(fd);
   if (head.toString('ascii') !== '%PDF-') throw new Error(`Invalid PDF signature: ${pdfPath}`);
-  console.log(`Created ${pdfPath} (${stat.size} bytes)`);
-  await page.close();
+  console.log(`Created ${pdfPath} (${stat.size} bytes, clean text ${printText.length} chars)`);
+
+  await printPage.close();
+  await sourcePage.close();
 }
 
 await browser.close();
@@ -217,7 +265,8 @@ await browser.close();
 const readme = [
   'K. Wah International Holdings Limited (00173.HK) - DBS Research Pack',
   '',
-  'The files are print-to-PDF copies of publicly accessible official DBS research pages, with the full article expanded before printing.',
+  'The files are clean print-to-PDF copies of publicly accessible official DBS research pages.',
+  'The full article text was isolated from the official page, while navigation, consent overlays, and site chrome were removed.',
   'Retrieved: 2026-09-02',
   '',
   ...reports.map((r, i) => `${i + 1}. ${r.date} | DBS | ${r.title}\n   Source: ${r.url}`),
