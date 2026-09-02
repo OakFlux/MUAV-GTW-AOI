@@ -1,0 +1,69 @@
+name: Build SJM Holdings 2020-2025 annual reports and 2026 interim
+
+on:
+  push:
+    branches:
+      - tmp/sjm-financials-20260902
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install browser and PDF validator
+        run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet pypdf
+
+      - name: Download official reports and build ZIP
+        run: node tmp/build_sjm_financials_20260902.mjs
+
+      - name: Validate PDFs and ZIP
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          from pypdf import PdfReader
+
+          base = Path('out_sjm_financials_20260902')
+          report_dir = base / 'reports'
+          pdfs = sorted(report_dir.glob('*.pdf'))
+          assert len(pdfs) == 7, f'Expected 7 PDFs, got {len(pdfs)}'
+
+          for i, p in enumerate(pdfs):
+              assert p.read_bytes()[:5] == b'%PDF-', f'Invalid PDF signature: {p}'
+              assert p.stat().st_size > 100_000, f'PDF too small: {p.stat().st_size}'
+              reader = PdfReader(str(p))
+              pages = len(reader.pages)
+              min_pages = 50 if i < 6 else 15
+              assert pages >= min_pages, f'Too few pages in {p.name}: {pages} < {min_pages}'
+              sample = ''.join((page.extract_text() or '') for page in reader.pages[:12])
+              normalized = sample.lower().replace(' ', '')
+              company_ok = ('sjmholdings' in normalized or '澳博控股' in normalized or '澳門博彩控股' in normalized or '澳门博彩控股' in normalized)
+              assert company_ok or (len(sample) < 300 and p.stat().st_size > 1_000_000), f'Company validation failed: {p.name}'
+              print(p.name, pages, p.stat().st_size, len(sample))
+
+          z = base / 'SJM_Holdings_00880_2020_2025_Annual_Reports_2026_Interim.zip'
+          assert z.exists() and z.stat().st_size > 1_000_000
+          with ZipFile(z) as zf:
+              assert zf.testzip() is None
+              names = zf.namelist()
+              assert len([n for n in names if n.lower().endswith('.pdf')]) == 7
+              assert any('README' in n for n in names)
+              assert any('校验值' in n for n in names)
+              print('ZIP', z.stat().st_size, names)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sjm-holdings-00880-financial-reports
+          path: out_sjm_financials_20260902/SJM_Holdings_00880_2020_2025_Annual_Reports_2026_Interim.zip
+          if-no-files-found: error
+          retention-days: 1
