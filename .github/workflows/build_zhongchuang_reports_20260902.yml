@@ -1,0 +1,246 @@
+name: Build Zhongchuang 601717 broker report package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build_zhongchuang_reports_20260902.yml'
+      - 'tmp/zhongchuang_reports_descriptor_20260902.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download, verify, and package reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/build_reports.py <<'PY'
+          import json
+          import os
+          import re
+          import ssl
+          import sys
+          import time
+          import urllib.request
+          import zipfile
+          from datetime import datetime
+          from pathlib import Path
+
+          STOCK_CODE = "601717"
+          OUT_ZIP = Path("zhongchuang_601717_broker_reports.zip")
+          WORK = Path("reports")
+          WORK.mkdir(exist_ok=True)
+
+          headers = {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+              "Referer": "https://data.eastmoney.com/",
+              "Accept": "application/json,text/plain,*/*",
+          }
+          context = ssl.create_default_context()
+
+          def api_reports():
+              url = "https://reportapi.eastmoney.com/report/list2"
+              payload = {
+                  "pageSize": 100,
+                  "pageNo": 1,
+                  "p": 1,
+                  "pageNum": 1,
+                  "pageNumber": 1,
+                  "beginTime": "2020-01-01",
+                  "endTime": "2026-09-02",
+                  "code": STOCK_CODE,
+                  "industryCode": "*",
+                  "rating": None,
+                  "ratingChange": None,
+                  "orgCode": None,
+                  "rcode": "",
+              }
+              req = urllib.request.Request(
+                  url,
+                  data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                  headers={**headers, "Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=45, context=context) as resp:
+                      raw = resp.read().decode("utf-8", errors="replace")
+                  try:
+                      obj = json.loads(raw)
+                  except json.JSONDecodeError:
+                      m = re.search(r"\((\{.*\})\)\s*$", raw, re.S)
+                      if not m:
+                          return []
+                      obj = json.loads(m.group(1))
+                  rows = obj.get("data") or (obj.get("result") or {}).get("data") or []
+                  out = []
+                  for x in rows:
+                      code = x.get("infoCode") or x.get("infocode") or x.get("INFO_CODE") or ""
+                      title = x.get("title") or x.get("reportName") or x.get("TITLE") or ""
+                      org = x.get("orgSName") or x.get("orgName") or x.get("ORG_SNAME") or "券商研究所"
+                      date = x.get("publishDate") or x.get("publishTime") or x.get("PUBLISH_DATE") or ""
+                      pages = x.get("attachPages") or x.get("pageCount") or x.get("ATTACH_PAGES") or 0
+                      try:
+                          pages = int(float(pages or 0))
+                      except Exception:
+                          pages = 0
+                      if code and title:
+                          out.append({
+                              "infoCode": code,
+                              "title": title,
+                              "org": org,
+                              "date": str(date)[:10],
+                              "pages": pages,
+                              "url": f"https://pdf.dfcfw.com/pdf/H3_{code}_1.pdf",
+                          })
+                  return out
+              except Exception as exc:
+                  print(f"API query failed: {exc}", file=sys.stderr)
+                  return []
+
+          fallback = [
+              {
+                  "infoCode": "AP202409051639745264",
+                  "title": "盈利能力改善明显，24H1利润快速增长（首次覆盖）",
+                  "org": "西南证券",
+                  "date": "2024-09-03",
+                  "pages": 13,
+                  "url": "https://pdf.dfcfw.com/pdf/H3_AP202409051639745264_1.pdf",
+              },
+              {
+                  "infoCode": "AP202409011639680496",
+                  "title": "煤机汽零业务双驱动，利润持续提升",
+                  "org": "华鑫证券",
+                  "date": "2024-09-01",
+                  "pages": 5,
+                  "url": "https://pdf.dfcfw.com/pdf/H3_AP202409011639680496_1.pdf?1725359300000.pdf=",
+              },
+              {
+                  "infoCode": "AP202504021650193991",
+                  "title": "煤机板块利润高增，汽零业务加速转型",
+                  "org": "西南证券",
+                  "date": "2025-04-01",
+                  "pages": 6,
+                  "url": "https://pdf.dfcfw.com/pdf/H3_AP202504021650193991_1.pdf?1743585194000.pdf=",
+              },
+          ]
+
+          def score(r):
+              t = r.get("title", "")
+              p = int(r.get("pages") or 0)
+              s = 0
+              if "公司深度" in t or "深度研究" in t or "深度分析" in t or "深度报告" in t:
+                  s += 1200
+              if "首次覆盖" in t:
+                  s += 900
+              if any(k in t for k in ["液压支架龙头", "液压支架领导者", "煤炭机械贡献主要利润", "双轮驱动"]):
+                  s += 650
+              if p >= 25:
+                  s += 500
+              elif p >= 20:
+                  s += 420
+              elif p >= 15:
+                  s += 330
+              elif p >= 10:
+                  s += 230
+              elif p >= 5:
+                  s += 80
+              if any(k in t for k in ["点评", "季报", "年报"]):
+                  s -= 260
+              try:
+                  s += int(re.sub(r"\D", "", r.get("date", ""))[:8] or 0) / 100000000
+              except Exception:
+                  pass
+              return s
+
+          candidates = api_reports() + fallback
+          seen = set()
+          ranked = []
+          for r in sorted(candidates, key=score, reverse=True):
+              key = r.get("infoCode") or r.get("url")
+              if not key or key in seen:
+                  continue
+              seen.add(key)
+              ranked.append(r)
+
+          def safe_name(text):
+              text = re.sub(r"[\\/:*?\"<>|\r\n]+", "_", str(text)).strip()
+              return re.sub(r"\s+", " ", text)[:100] or "report"
+
+          selected = []
+          for r in ranked:
+              if len(selected) >= 3:
+                  break
+              idx = len(selected) + 1
+              filename = f"{idx:02d}_{safe_name(r['org'])}_{safe_name(r['title'])}_{safe_name(r['date'])}.pdf"
+              path = WORK / filename
+              req = urllib.request.Request(r["url"], headers={**headers, "Accept": "application/pdf,*/*"})
+              ok = False
+              for attempt in range(1, 4):
+                  try:
+                      with urllib.request.urlopen(req, timeout=90, context=context) as resp:
+                          data = resp.read()
+                      if not data.startswith(b"%PDF-") or len(data) < 20000:
+                          raise RuntimeError(f"invalid PDF payload ({len(data)} bytes)")
+                      path.write_bytes(data)
+                      ok = True
+                      break
+                  except Exception as exc:
+                      print(f"download attempt {attempt} failed for {r['url']}: {exc}", file=sys.stderr)
+                      time.sleep(attempt * 2)
+              if ok:
+                  selected.append({**r, "path": path, "filename": filename, "bytes": path.stat().st_size})
+
+          if len(selected) < 2:
+              raise SystemExit(f"Only {len(selected)} valid PDFs downloaded; need at least 2")
+
+          manifest = [
+              "中创智领（601717，原郑煤机）券商报告资料包",
+              f"生成日期：{datetime.utcnow().strftime('%Y-%m-%d')} UTC",
+              f"有效PDF数量：{len(selected)}",
+              "",
+          ]
+          for i, r in enumerate(selected, 1):
+              manifest.extend([
+                  f"{i}. {r['org']}｜{r['date']}｜{r.get('pages') or '页数未标注'}页",
+                  f"   {r['title']}",
+                  f"   文件：{r['filename']}",
+                  f"   大小：{r['bytes']} bytes",
+                  f"   来源：{r['url']}",
+                  "",
+              ])
+          manifest_path = WORK / "报告清单.txt"
+          manifest_path.write_text("\n".join(manifest), encoding="utf-8")
+
+          with zipfile.ZipFile(OUT_ZIP, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+              for r in selected:
+                  zf.write(r["path"], arcname=r["filename"])
+              zf.write(manifest_path, arcname="报告清单.txt")
+
+          with zipfile.ZipFile(OUT_ZIP, "r") as zf:
+              bad = zf.testzip()
+              if bad:
+                  raise SystemExit(f"ZIP validation failed at {bad}")
+              pdf_names = [n for n in zf.namelist() if n.lower().endswith(".pdf")]
+              if len(pdf_names) != len(selected):
+                  raise SystemExit("PDF count mismatch in ZIP")
+          print(json.dumps({
+              "zip": str(OUT_ZIP),
+              "size": OUT_ZIP.stat().st_size,
+              "reports": [{k: r[k] for k in ["org", "date", "title", "pages", "filename", "bytes"]} for r in selected],
+          }, ensure_ascii=False, indent=2))
+          PY
+          python3 /tmp/build_reports.py | tee build_result.json
+
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhongchuang-601717-broker-reports
+          path: zhongchuang_601717_broker_reports.zip
+          if-no-files-found: error
+          retention-days: 1
