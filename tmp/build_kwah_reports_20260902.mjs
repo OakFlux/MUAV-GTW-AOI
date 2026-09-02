@@ -36,12 +36,86 @@ const context = await browser.newContext({
   userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 });
 
+async function dismissResearchDisclaimer(page) {
+  const selectors = [
+    'button:has-text("Accept")',
+    'a:has-text("Accept")',
+    '[role="button"]:has-text("Accept")',
+    'button:has-text("I Accept")',
+    'a:has-text("I Accept")'
+  ];
+
+  for (const selector of selectors) {
+    const candidates = page.locator(selector);
+    const count = await candidates.count();
+    for (let i = 0; i < count; i++) {
+      const el = candidates.nth(i);
+      const text = ((await el.innerText().catch(() => '')) || '').trim();
+      if (!/^I?\s*Accept$/i.test(text)) continue;
+      if (await el.isVisible().catch(() => false)) {
+        await el.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(1500);
+        break;
+      }
+    }
+  }
+
+  // Defensive cleanup if the consent handler is blocked by the page's scripts.
+  await page.evaluate(() => {
+    const titleNodes = Array.from(document.querySelectorAll('body *')).filter((el) => {
+      const t = (el.textContent || '').trim();
+      return t === 'DBS Research Disclaimer';
+    });
+
+    for (const title of titleNodes) {
+      let node = title;
+      let candidate = null;
+      for (let depth = 0; depth < 8 && node && node !== document.body; depth++, node = node.parentElement) {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        const text = (node.textContent || '');
+        if (text.includes('DBS Research Disclaimer') && text.includes('Accept') &&
+            (style.position === 'fixed' || style.position === 'absolute' || rect.width > innerWidth * 0.35)) {
+          candidate = node;
+        }
+      }
+      if (candidate && candidate !== document.body) candidate.remove();
+    }
+
+    // Remove fixed full-screen backdrops left behind after the dialog is removed.
+    for (const el of Array.from(document.querySelectorAll('body *'))) {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      const z = Number.parseInt(style.zIndex || '0', 10) || 0;
+      const coversScreen = rect.width >= innerWidth * 0.85 && rect.height >= innerHeight * 0.85;
+      const mostlyEmpty = ((el.textContent || '').trim().length < 80);
+      if (style.position === 'fixed' && coversScreen && z >= 10 && mostlyEmpty) el.remove();
+    }
+
+    document.documentElement.style.overflow = 'auto';
+    document.body.style.overflow = 'auto';
+    document.body.classList.remove('modal-open', 'overflow-hidden', 'no-scroll');
+  });
+
+  await page.waitForTimeout(500);
+  const visible = await page.locator('text=DBS Research Disclaimer').evaluateAll((els) =>
+    els.some((el) => {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity || 1) > 0 && r.width > 0 && r.height > 0;
+    })
+  ).catch(() => false);
+  if (visible) throw new Error('DBS Research Disclaimer dialog is still visible after dismissal');
+}
+
 for (const report of reports) {
   const page = await context.newPage();
   console.log(`Opening ${report.url}`);
   await page.goto(report.url, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(5000);
   try { await page.waitForLoadState('networkidle', { timeout: 30000 }); } catch {}
+
+  await dismissResearchDisclaimer(page);
 
   const title = (await page.title()).trim();
   const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
@@ -52,10 +126,11 @@ for (const report of reports) {
   await page.emulateMedia({ media: 'screen' });
   await page.addStyleTag({ content: `
     @media print {
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; overflow: visible !important; }
       header, footer, nav, [class*="cookie" i], [id*="cookie" i], [class*="breadcrumb" i],
       [class*="chat" i], [class*="contact" i], [class*="related" i], [class*="offer" i],
-      [class*="login" i], [class*="navigation" i] { display: none !important; }
+      [class*="login" i], [class*="navigation" i], [class*="modal" i], [class*="overlay" i],
+      [class*="backdrop" i], [role="dialog"] { display: none !important; }
       a { color: inherit !important; text-decoration: none !important; }
     }
   `});
