@@ -60,12 +60,10 @@ async function dismissResearchDisclaimer(page) {
     }
   }
 
-  // Defensive cleanup if the consent handler is blocked by the page's scripts.
   await page.evaluate(() => {
-    const titleNodes = Array.from(document.querySelectorAll('body *')).filter((el) => {
-      const t = (el.textContent || '').trim();
-      return t === 'DBS Research Disclaimer';
-    });
+    const titleNodes = Array.from(document.querySelectorAll('body *')).filter((el) =>
+      (el.textContent || '').trim() === 'DBS Research Disclaimer'
+    );
 
     for (const title of titleNodes) {
       let node = title;
@@ -73,7 +71,7 @@ async function dismissResearchDisclaimer(page) {
       for (let depth = 0; depth < 8 && node && node !== document.body; depth++, node = node.parentElement) {
         const style = getComputedStyle(node);
         const rect = node.getBoundingClientRect();
-        const text = (node.textContent || '');
+        const text = node.textContent || '';
         if (text.includes('DBS Research Disclaimer') && text.includes('Accept') &&
             (style.position === 'fixed' || style.position === 'absolute' || rect.width > innerWidth * 0.35)) {
           candidate = node;
@@ -82,13 +80,12 @@ async function dismissResearchDisclaimer(page) {
       if (candidate && candidate !== document.body) candidate.remove();
     }
 
-    // Remove fixed full-screen backdrops left behind after the dialog is removed.
     for (const el of Array.from(document.querySelectorAll('body *'))) {
       const style = getComputedStyle(el);
       const rect = el.getBoundingClientRect();
       const z = Number.parseInt(style.zIndex || '0', 10) || 0;
       const coversScreen = rect.width >= innerWidth * 0.85 && rect.height >= innerHeight * 0.85;
-      const mostlyEmpty = ((el.textContent || '').trim().length < 80);
+      const mostlyEmpty = (el.textContent || '').trim().length < 80;
       if (style.position === 'fixed' && coversScreen && z >= 10 && mostlyEmpty) el.remove();
     }
 
@@ -108,6 +105,58 @@ async function dismissResearchDisclaimer(page) {
   if (visible) throw new Error('DBS Research Disclaimer dialog is still visible after dismissal');
 }
 
+async function expandFullArticle(page) {
+  let lastLength = 0;
+  for (let round = 0; round < 5; round++) {
+    const before = (await page.locator('body').innerText()).length;
+    const candidates = page.locator('a, button, [role="button"]').filter({ hasText: /Read\s*More/i });
+    const count = await candidates.count();
+    let clicked = false;
+    for (let i = 0; i < count; i++) {
+      const el = candidates.nth(i);
+      const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      if (!/^Read\s*More/i.test(text)) continue;
+      if (await el.isVisible().catch(() => false)) {
+        await el.scrollIntoViewIfNeeded().catch(() => {});
+        await el.click({ force: true }).catch(() => {});
+        clicked = true;
+        await page.waitForTimeout(1200);
+        break;
+      }
+    }
+    const after = (await page.locator('body').innerText()).length;
+    console.log(`Article expansion round ${round + 1}: ${before} -> ${after} characters; clicked=${clicked}`);
+    if (!clicked || after <= lastLength + 20) break;
+    lastLength = after;
+  }
+
+  // Some versions implement the fold purely through CSS rather than a click handler.
+  await page.evaluate(() => {
+    const readMoreNodes = Array.from(document.querySelectorAll('a, button, [role="button"], span')).filter((el) =>
+      /^Read\s*More/i.test((el.textContent || '').replace(/\s+/g, ' ').trim())
+    );
+    for (const control of readMoreNodes) {
+      let p = control.parentElement;
+      for (let depth = 0; depth < 6 && p; depth++, p = p.parentElement) {
+        const style = getComputedStyle(p);
+        if (style.maxHeight !== 'none' || style.overflow === 'hidden') {
+          p.style.maxHeight = 'none';
+          p.style.height = 'auto';
+          p.style.overflow = 'visible';
+        }
+      }
+      control.style.display = 'none';
+    }
+    for (const el of Array.from(document.querySelectorAll('[style*="max-height"], [class*="collapse" i], [class*="expand" i], [class*="readmore" i], [class*="read-more" i]'))) {
+      el.style.maxHeight = 'none';
+      el.style.height = 'auto';
+      el.style.overflow = 'visible';
+      el.classList.add('show', 'open', 'expanded');
+    }
+  });
+  await page.waitForTimeout(500);
+}
+
 for (const report of reports) {
   const page = await context.newPage();
   console.log(`Opening ${report.url}`);
@@ -116,21 +165,26 @@ for (const report of reports) {
   try { await page.waitForLoadState('networkidle', { timeout: 30000 }); } catch {}
 
   await dismissResearchDisclaimer(page);
+  await expandFullArticle(page);
 
   const title = (await page.title()).trim();
   const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-  if (!/K\.?\s*Wah International/i.test(bodyText) || bodyText.length < 2000) {
-    throw new Error(`Page validation failed for ${report.url}; title=${title}; body chars=${bodyText.length}`);
+  if (!/K\.?\s*Wah International/i.test(bodyText) || bodyText.length < 3200) {
+    throw new Error(`Full article validation failed for ${report.url}; title=${title}; body chars=${bodyText.length}`);
   }
 
   await page.emulateMedia({ media: 'screen' });
   await page.addStyleTag({ content: `
     @media print {
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; overflow: visible !important; }
+      html, body { overflow: visible !important; height: auto !important; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       header, footer, nav, [class*="cookie" i], [id*="cookie" i], [class*="breadcrumb" i],
       [class*="chat" i], [class*="contact" i], [class*="related" i], [class*="offer" i],
       [class*="login" i], [class*="navigation" i], [class*="modal" i], [class*="overlay" i],
-      [class*="backdrop" i], [role="dialog"] { display: none !important; }
+      [class*="backdrop" i], [class*="footer" i], [id*="footer" i], [role="dialog"] { display: none !important; }
+      [style*="max-height"], [class*="collapse" i], [class*="readmore" i], [class*="read-more" i] {
+        max-height: none !important; height: auto !important; overflow: visible !important;
+      }
       a { color: inherit !important; text-decoration: none !important; }
     }
   `});
@@ -163,7 +217,7 @@ await browser.close();
 const readme = [
   'K. Wah International Holdings Limited (00173.HK) - DBS Research Pack',
   '',
-  'The files are print-to-PDF copies of publicly accessible official DBS research pages.',
+  'The files are print-to-PDF copies of publicly accessible official DBS research pages, with the full article expanded before printing.',
   'Retrieved: 2026-09-02',
   '',
   ...reports.map((r, i) => `${i + 1}. ${r.date} | DBS | ${r.title}\n   Source: ${r.url}`),
