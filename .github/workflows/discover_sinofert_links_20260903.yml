@@ -1,0 +1,28 @@
+name: Discover Sinofert financial report links
+
+on:
+  push:
+    branches:
+      - tmp/sinofert-financials-20260903
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Discover links
+        run: node tmp/discover_sinofert_links_20260903.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sinofert-link-discovery
+          path: out_sinofert_discovery_20260903/links.json
+          if-no-files-found: error
+          retention-days: 1
