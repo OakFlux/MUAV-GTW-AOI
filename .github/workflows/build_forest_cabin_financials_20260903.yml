@@ -23,7 +23,7 @@ jobs:
           sudo apt-get install -y -qq poppler-utils
 
       - name: Download, validate and package official filings
-        run: python tmp/build_forest_cabin_financials_20260903.py
+        run: python tmp/build_forest_cabin_financials_20260903_v2.py
 
       - name: Upload verified ZIP
         uses: actions/upload-artifact@v4
