@@ -41,29 +41,39 @@ jobs:
           render_dir = Path('out_melco_international_20260903/renders')
           render_dir.mkdir(parents=True, exist_ok=True)
 
+          manifest = json.loads((base / '文件清单与校验值.json').read_text(encoding='utf-8'))
+          assert len(manifest) == 7
+          assert {item['filename'] for item in manifest} == {p.name for p in pdfs}
+          interim_meta = next(item for item in manifest if item['type'] == 'latest_interim_results')
+          assert interim_meta['period_end'] == '2026-06-30'
+          assert interim_meta['publication_date'] == '2026-08-31'
+          assert '2026%20interim%20results.pdf' in interim_meta['source_url'].lower()
+
           page_counts = {}
           for index, pdf in enumerate(pdfs):
               reader = PdfReader(str(pdf), strict=False)
               pages = len(reader.pages)
               minimum = 100 if index < 6 else 15
               assert pages >= minimum, f'Too few pages in {pdf.name}: {pages} < {minimum}'
-              sample = '\n'.join((page.extract_text() or '') for page in reader.pages[:min(30, pages)])
-              normalized = sample.lower().replace(' ', '')
-              assert ('melcointernationaldevelopment' in normalized or '新濠國際發展' in sample or '新濠国际发展' in sample), f'Company name not found in {pdf.name}'
+              sample = '\n'.join((page.extract_text() or '') for page in reader.pages[:min(40, pages)])
+              normalized = ''.join(sample.lower().split())
+              if index < 6:
+                  assert ('melcointernationaldevelopment' in normalized or '新濠國際發展' in sample or '新濠国际发展' in sample), f'Company name not found in {pdf.name}'
+              else:
+                  title_match = ('interimresults' in normalized or '中期業績' in sample or '中期业绩' in sample)
+                  period_match = ('30june2026' in normalized or '二零二六年六月三十日' in sample or '2026年6月30日' in sample)
+                  assert title_match or period_match, f'Interim title/period not found in {pdf.name}'
               assert pdf.stat().st_size > 200_000, f'PDF too small: {pdf.name}'
               out_prefix = render_dir / pdf.stem
               subprocess.run([
-                  'pdftoppm', '-f', '1', '-l', '1', '-png', '-singlefile', '-r', '90',
+                  'pdftoppm', '-f', '1', '-l', '1', '-png', '-singlefile', '-r', '110',
                   str(pdf), str(out_prefix)
               ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
               png = Path(str(out_prefix) + '.png')
               assert png.exists() and png.stat().st_size > 10_000, f'Render failed: {pdf.name}'
               page_counts[pdf.name] = pages
-              print(pdf.name, pages, pdf.stat().st_size)
+              print(pdf.name, pages, pdf.stat().st_size, png.stat().st_size)
 
-          manifest = json.loads((base / '文件清单与校验值.json').read_text(encoding='utf-8'))
-          assert len(manifest) == 7
-          assert {item['filename'] for item in manifest} == {p.name for p in pdfs}
           assert sum(p.stat().st_size for p in pdfs) > 5_000_000
           (base / '页数校验结果.json').write_text(json.dumps(page_counts, ensure_ascii=False, indent=2), encoding='utf-8')
           print('VALIDATED', page_counts)
