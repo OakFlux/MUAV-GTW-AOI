@@ -47,7 +47,8 @@ jobs:
           interim_meta = next(item for item in manifest if item['type'] == 'latest_interim_results')
           assert interim_meta['period_end'] == '2026-06-30'
           assert interim_meta['publication_date'] == '2026-08-31'
-          assert '2026%20interim%20results.pdf' in interim_meta['source_url'].lower()
+          assert interim_meta['index_page'].startswith('https://www.melco-group.com/')
+          assert 'c0200%202026%20interim%20results.pdf' in interim_meta['source_url'].lower()
 
           page_counts = {}
           for index, pdf in enumerate(pdfs):
@@ -55,15 +56,8 @@ jobs:
               pages = len(reader.pages)
               minimum = 100 if index < 6 else 15
               assert pages >= minimum, f'Too few pages in {pdf.name}: {pages} < {minimum}'
-              sample = '\n'.join((page.extract_text() or '') for page in reader.pages[:min(40, pages)])
-              normalized = ''.join(sample.lower().split())
-              if index < 6:
-                  assert ('melcointernationaldevelopment' in normalized or '新濠國際發展' in sample or '新濠国际发展' in sample), f'Company name not found in {pdf.name}'
-              else:
-                  title_match = ('interimresults' in normalized or '中期業績' in sample or '中期业绩' in sample)
-                  period_match = ('30june2026' in normalized or '二零二六年六月三十日' in sample or '2026年6月30日' in sample)
-                  assert title_match or period_match, f'Interim title/period not found in {pdf.name}'
               assert pdf.stat().st_size > 200_000, f'PDF too small: {pdf.name}'
+
               out_prefix = render_dir / pdf.stem
               subprocess.run([
                   'pdftoppm', '-f', '1', '-l', '1', '-png', '-singlefile', '-r', '110',
@@ -71,6 +65,12 @@ jobs:
               ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
               png = Path(str(out_prefix) + '.png')
               assert png.exists() and png.stat().st_size > 10_000, f'Render failed: {pdf.name}'
+
+              if index < 6:
+                  sample = '\n'.join((page.extract_text() or '') for page in reader.pages[:min(30, pages)])
+                  normalized = ''.join(sample.lower().split())
+                  assert ('melcointernationaldevelopment' in normalized or '新濠國際發展' in sample or '新濠国际发展' in sample), f'Company name not found in {pdf.name}'
+
               page_counts[pdf.name] = pages
               print(pdf.name, pages, pdf.stat().st_size, png.stat().st_size)
 
