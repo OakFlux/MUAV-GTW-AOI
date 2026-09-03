@@ -1,0 +1,29 @@
+name: Build Sinofert 2020-2025 annual reports and 2026 interim results
+
+on:
+  push:
+    branches:
+      - tmp/sinofert-treelazy-20260903
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PDF validators
+        run: |
+          python -m pip install --quiet pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Download, validate, render and package reports
+        run: python tmp/build_sinofert_financials_20260903.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sinofert-holdings-00297-financial-reports
+          path: out_sinofert_financials_20260903/Sinofert_Holdings_00297_2020_2025_Annual_Reports_2026_Interim.zip
+          if-no-files-found: error
+          retention-days: 1
