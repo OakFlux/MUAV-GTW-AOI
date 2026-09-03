@@ -25,13 +25,12 @@ jobs:
           sudo apt-get install -y -qq poppler-utils
 
       - name: Download official reports
-        run: node tmp/build_melco_international_financials_20260903.mjs
+        run: node tmp/build_melco_international_financials_20260903_v2.mjs
 
       - name: Validate PDFs and render first pages
         run: |
           python - <<'PY'
           from pathlib import Path
-          from zipfile import ZipFile
           import json
           import subprocess
           from pypdf import PdfReader
