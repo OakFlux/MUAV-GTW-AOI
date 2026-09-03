@@ -1,0 +1,79 @@
+name: Build Melco International 2020-2025 annual reports and 2026 interim results
+
+on:
+  push:
+    branches:
+      - tmp/melco-intl-financials-20260903
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install browser and validators
+        run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Download official reports
+        run: node tmp/build_melco_international_financials_20260903.mjs
+
+      - name: Validate PDFs and render first pages
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import json
+          import subprocess
+          from pypdf import PdfReader
+
+          base = Path('out_melco_international_20260903/reports')
+          pdfs = sorted(base.glob('*.pdf'))
+          assert len(pdfs) == 7, f'Expected 7 PDFs, got {len(pdfs)}'
+          render_dir = Path('out_melco_international_20260903/renders')
+          render_dir.mkdir(parents=True, exist_ok=True)
+
+          page_counts = {}
+          for index, pdf in enumerate(pdfs):
+              reader = PdfReader(str(pdf), strict=False)
+              pages = len(reader.pages)
+              minimum = 100 if index < 6 else 15
+              assert pages >= minimum, f'Too few pages in {pdf.name}: {pages} < {minimum}'
+              sample = '\n'.join((page.extract_text() or '') for page in reader.pages[:min(30, pages)])
+              normalized = sample.lower().replace(' ', '')
+              assert ('melcointernationaldevelopment' in normalized or '新濠國際發展' in sample or '新濠国际发展' in sample), f'Company name not found in {pdf.name}'
+              assert pdf.stat().st_size > 200_000, f'PDF too small: {pdf.name}'
+              out_prefix = render_dir / pdf.stem
+              subprocess.run([
+                  'pdftoppm', '-f', '1', '-l', '1', '-png', '-singlefile', '-r', '90',
+                  str(pdf), str(out_prefix)
+              ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+              png = Path(str(out_prefix) + '.png')
+              assert png.exists() and png.stat().st_size > 10_000, f'Render failed: {pdf.name}'
+              page_counts[pdf.name] = pages
+              print(pdf.name, pages, pdf.stat().st_size)
+
+          manifest = json.loads((base / '文件清单与校验值.json').read_text(encoding='utf-8'))
+          assert len(manifest) == 7
+          assert {item['filename'] for item in manifest} == {p.name for p in pdfs}
+          assert sum(p.stat().st_size for p in pdfs) > 5_000_000
+          (base / '页数校验结果.json').write_text(json.dumps(page_counts, ensure_ascii=False, indent=2), encoding='utf-8')
+          print('VALIDATED', page_counts)
+          PY
+
+      - name: Upload final report package
+        uses: actions/upload-artifact@v4
+        with:
+          name: melco-international-00200-financial-reports
+          path: out_melco_international_20260903/reports/*
+          if-no-files-found: error
+          retention-days: 1
