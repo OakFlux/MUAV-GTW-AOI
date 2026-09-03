@@ -1,0 +1,35 @@
+name: Build Forest Cabin annual report prospectus and latest interim package
+
+on:
+  push:
+    branches:
+      - tmp/forest-cabin-financials-20260903
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PDF download and validation tools
+        run: |
+          python -m pip install --quiet 'httpx[http2]' pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Download, validate and package official filings
+        run: python tmp/build_forest_cabin_financials_20260903.py
+
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: forest-cabin-02657-financial-and-ipo-documents
+          path: out_forest_cabin_20260903/Forest_Cabin_02657_All_Annual_Reports_Prospectus_Latest_Interim_2026-09-03.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
