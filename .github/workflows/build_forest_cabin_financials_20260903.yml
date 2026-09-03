@@ -23,7 +23,18 @@ jobs:
           sudo apt-get install -y -qq poppler-utils
 
       - name: Download, validate and package official filings
-        run: python tmp/build_forest_cabin_financials_20260903_v3.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tmp/build_forest_cabin_financials_20260903_v3.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'r"dividend|股息|董事會會議|董事会会议|board meeting"'
+          new = 'r"董事會會議|董事会会议|board meeting"'
+          if old not in text:
+              raise SystemExit('Expected interim-filter expression was not found')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          python tmp/build_forest_cabin_financials_20260903_v3.py
 
       - name: Upload verified ZIP
         uses: actions/upload-artifact@v4
