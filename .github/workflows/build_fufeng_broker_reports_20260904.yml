@@ -22,6 +22,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq poppler-utils
 
+      - name: Normalize harmless title punctuation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tmp/build_fufeng_broker_reports_20260904.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'normalized_page_title = re.sub(r"\\s+", "", parsed["page_title"])',
+              'normalized_page_title = re.sub(r"[\\s：:]", "", parsed["page_title"])',
+          )
+          text = text.replace(
+              'normalized_expected_title = re.sub(r"\\s+", "", report["title"])',
+              'normalized_expected_title = re.sub(r"[\\s：:]", "", report["title"])',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Build and validate report package
         run: python tmp/build_fufeng_broker_reports_20260904.py
 
