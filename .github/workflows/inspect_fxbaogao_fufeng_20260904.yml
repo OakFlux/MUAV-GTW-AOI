@@ -1,0 +1,29 @@
+name: Inspect public Fufeng broker report sources
+
+on:
+  push:
+    branches:
+      - tmp/fufeng-broker-reports-20260904
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser
+        run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Inspect report pages and network
+        run: node tmp/inspect_fxbaogao_fufeng_20260904.mjs
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: fufeng-fxbaogao-inspection
+          path: out_fufeng_fxbaogao_inspect/*
+          if-no-files-found: error
+          retention-days: 1
