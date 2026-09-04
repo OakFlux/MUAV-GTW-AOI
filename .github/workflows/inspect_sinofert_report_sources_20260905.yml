@@ -1,0 +1,27 @@
+name: Inspect Sinofert broker report public sources
+
+on:
+  push:
+    branches:
+      - tmp/sinofert-broker-reports-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install client
+        run: python -m pip install --quiet 'httpx[http2]'
+      - name: Inspect report sources
+        run: python tmp/inspect_sinofert_report_sources_20260905.py
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: sinofert-source-inspection
+          path: out_sinofert_source_inspect/*
+          if-no-files-found: error
+          retention-days: 1
