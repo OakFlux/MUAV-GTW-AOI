@@ -1,0 +1,35 @@
+name: Build Fufeng Group 2020-2025 annual reports and 2026 interim results
+
+on:
+  push:
+    branches:
+      - tmp/fufeng-financials-20260904
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install download and PDF validation tools
+        run: |
+          python -m pip install --quiet 'httpx[http2]' pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Download, validate and package official reports
+        run: python tmp/build_fufeng_financials_20260904.py
+
+      - name: Upload verified report package
+        uses: actions/upload-artifact@v4
+        with:
+          name: fufeng-group-00546-financial-reports
+          path: out_fufeng_20260904/Fufeng_Group_00546_2020_2025_Annual_Reports_2026_Interim_Results.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
