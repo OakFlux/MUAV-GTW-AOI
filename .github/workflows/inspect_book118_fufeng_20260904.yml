@@ -1,0 +1,26 @@
+name: Inspect Book118 Fufeng report preview
+
+on:
+  push:
+    branches:
+      - tmp/book118-fufeng-inspect-20260904
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - run: node tmp/inspect_book118_fufeng_20260904.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: book118-fufeng-inspection
+          path: out_book118_fufeng_inspect/*
+          if-no-files-found: error
+          retention-days: 1
