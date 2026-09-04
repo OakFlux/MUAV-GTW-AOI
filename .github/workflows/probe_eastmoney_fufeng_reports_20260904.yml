@@ -1,0 +1,24 @@
+name: Probe Eastmoney Fufeng research reports
+
+on:
+  push:
+    branches:
+      - tmp/eastmoney-fufeng-reports-20260904
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet requests
+      - run: python tmp/probe_eastmoney_fufeng_reports_20260904.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eastmoney-fufeng-report-probe
+          path: out_eastmoney_fufeng_probe/*
+          if-no-files-found: error
+          retention-days: 1
