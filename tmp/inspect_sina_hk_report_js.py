@@ -20,12 +20,11 @@ urls=sorted(set(re.findall(r'https?://[^"\'`\\\s<>]+',text)))
 paths=sorted(set(m.group(1) for m in re.finditer(r'["\']([^"\']*(?:report|研报|api|pdf|download|file)[^"\']*)["\']',text,re.I)))
 print('URLS',json.dumps(urls,ensure_ascii=False))
 print('PATHS',json.dumps(paths,ensure_ascii=False))
-for pat in ['reportid','api','ajax','jsonp','callback','detail','pdf','download','getReport','report_detail']:
+for pat in ['reportid','rptid','api','ajax','jsonp','callback','detail','pdf','download','getReport','report_detail']:
  for i,m in enumerate(re.finditer(pat,text,re.I)):
   if i>=30:break
   print('CTX',pat,text[max(0,m.start()-700):m.end()+1400].replace('\n',' ')[:2400])
 
-# Build candidate endpoint URLs from literal strings and common Sina patterns.
 candidates=set()
 for u in urls:
  candidates.add(u)
@@ -34,13 +33,22 @@ for p in paths:
  elif p.startswith('/'): candidates.add(urljoin('https://stock.finance.sina.com.cn/',p))
  elif 'report' in p.lower() or 'api' in p.lower(): candidates.add(urljoin('https://stock.finance.sina.com.cn/hkstock/view/',p))
 
+RID='839511181107'
 common=[
- 'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getReportDetail?reportid=839511181107',
- 'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getReportInfo?reportid=839511181107',
- 'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getReport?reportid=839511181107',
- 'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getResearchReportDetail?reportid=839511181107',
- 'https://stock.finance.sina.com.cn/hkstock/api/openapi.php/HK_StockService.getReportDetail?reportid=839511181107',
- 'https://stock.finance.sina.com.cn/hkstock/view/api.php?reportid=839511181107',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getShow?rptid={RID}&simple=1',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getShow?rptid={RID}&simple=0',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getShow?rptid={RID}',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getShow?reportid={RID}&simple=1',
+ 'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getList?symbol=01021&page=1&num=100',
+ 'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getList?symbol=hk01021&page=1&num=100',
+ 'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getReportList?symbol=01021&page=1&num=100',
+ 'https://quotes.sina.cn/hk/api/openapi.php/HK_ReportService.getStockReports?symbol=01021&page=1&num=100',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getReportDetail?reportid={RID}',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getReportInfo?reportid={RID}',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getReport?reportid={RID}',
+ f'https://quotes.sina.cn/hk/api/openapi.php/HK_StockService.getResearchReportDetail?reportid={RID}',
+ f'https://stock.finance.sina.com.cn/hkstock/api/openapi.php/HK_StockService.getReportDetail?reportid={RID}',
+ f'https://stock.finance.sina.com.cn/hkstock/view/api.php?reportid={RID}',
 ]
 candidates.update(common)
 
@@ -55,22 +63,25 @@ def maybe_pdf(resp,label,url):
  return None
 
 for idx,u in enumerate(sorted(candidates)):
- # Ignore generic static image/style links.
  if any(x in u.lower() for x in ['.css','.png','.jpg','.gif','.svg','weibo.com','baidu.com']): continue
  try:
-  # Substitute/reportid placeholders from JS literals.
   variants=[u]
-  if 'reportid' in u.lower() and '839511181107' not in u:
-   if '?' in u: variants.append(u+'&reportid=839511181107')
-   else: variants.append(u+'?reportid=839511181107')
+  if 'reportid' in u.lower() and RID not in u:
+   variants.append(u+('&' if '?' in u else '?')+f'reportid={RID}')
+  if 'rptid' in u.lower() and RID not in u:
+   variants.append(u+('&' if '?' in u else '?')+f'rptid={RID}&simple=1')
   for j,v in enumerate(variants):
    rr=client.get(v,headers={'Accept':'application/json,text/plain,application/pdf,*/*'})
    ct=rr.headers.get('content-type',''); print('PROBE',idx,j,rr.status_code,ct,len(rr.content),rr.url)
    pdf=maybe_pdf(rr,f'p_{idx}_{j}',str(rr.url))
    preview=''
-   if not pdf and len(rr.content)<2_000_000:
-    try: preview=rr.text[:10000]
+   if not pdf and len(rr.content)<4_000_000:
+    try: preview=rr.text[:500000]
     except: pass
+   if preview:
+    for term in ['pdf','download','attachment','file','url','reportinfo','source']:
+     pos=preview.lower().find(term.lower())
+     if pos>=0: print('PREVIEW_CTX',idx,j,term,preview[max(0,pos-500):pos+1800].replace('\n',' ')[:2300])
    results.append({'requested':v,'final':str(rr.url),'status':rr.status_code,'ct':ct,'bytes':len(rr.content),'preview':preview,'pdf':pdf})
  except Exception as e: print('ERR',u,repr(e))
 
