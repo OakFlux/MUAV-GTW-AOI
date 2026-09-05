@@ -1,0 +1,21 @@
+name: Scan Eastmoney exactly for Huayan Robotics reports
+on:
+  push:
+    branches: [tmp/huayan-em-exact-20260905]
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet 'httpx[http2]' pypdf
+      - run: python tmp/scan_eastmoney_huayan_exact.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huayan-eastmoney-exact
+          path: out_huayan_em_exact/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
