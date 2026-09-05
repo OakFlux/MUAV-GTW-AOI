@@ -1,0 +1,27 @@
+name: Inspect Xingzheng International Huayan research route
+
+on:
+  push:
+    branches:
+      - tmp/huayan-xyzq-research-route-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - run: node tmp/inspect_xyzq_huayan_research_route.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xyzq-huayan-research-route
+          path: out_xyzq_huayan_research/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
