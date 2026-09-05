@@ -1,0 +1,28 @@
+name: Find original Huayan Robotics 1021 broker PDFs
+
+on:
+  push:
+    branches:
+      - tmp/huayan-1021-originals-20260905-v2
+
+jobs:
+  search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet 'httpx[http2]' pypdf
+      - name: Search and validate public original PDFs
+        run: python tmp/find_huayan_1021_original_pdfs.py
+      - name: Upload diagnostics and found PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: huayan-1021-original-pdf-search
+          path: out_huayan_1021_original_search/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
