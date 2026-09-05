@@ -1,0 +1,27 @@
+name: Inspect Huayan target document on 1c9u
+
+on:
+  push:
+    branches:
+      - tmp/huayan-1c9u-target-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - run: node tmp/inspect_huayan_1c9u_target.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huayan-1c9u-target-inspection
+          path: out_huayan_1c9u_target/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
