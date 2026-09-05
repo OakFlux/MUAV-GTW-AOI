@@ -1,0 +1,21 @@
+name: Inspect public Huayan report links on Vzkoo and 1c9u
+on:
+  push:
+    branches: [tmp/huayan-vzkoo-1c9u-20260905]
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet 'httpx[http2]' pypdf
+      - run: python tmp/inspect_huayan_vzkoo_1c9u.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huayan-vzkoo-1c9u-inspection
+          path: out_huayan_vzkoo_1c9u/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
