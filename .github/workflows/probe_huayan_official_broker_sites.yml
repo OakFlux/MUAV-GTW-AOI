@@ -1,0 +1,23 @@
+name: Probe official broker sites for Huayan Robotics reports
+on:
+  push:
+    branches:
+      - tmp/huayan-official-sites-probe-20260905
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet 'httpx[http2]'
+      - run: python tmp/probe_huayan_official_broker_sites.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huayan-official-broker-site-probe
+          path: out_huayan_official_sites/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 6
