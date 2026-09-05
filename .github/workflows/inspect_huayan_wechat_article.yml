@@ -1,0 +1,30 @@
+name: Inspect public Huayan Deutsche Bank WeChat article
+
+on:
+  push:
+    branches:
+      - tmp/huayan-wechat-20260905-v2
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser
+        run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Inspect public source article
+        run: node tmp/inspect_huayan_wechat_article.mjs
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: huayan-wechat-article-inspection
+          path: out_huayan_wechat_article/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 6
