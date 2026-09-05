@@ -1,0 +1,31 @@
+name: Build Sinofert official broker research report package
+
+on:
+  push:
+    branches:
+      - tmp/sinofert-official-download-20260905
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PDF tools
+        run: |
+          python -m pip install --quiet 'httpx[http2]' pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils qpdf
+      - name: Download, inspect and package reports
+        run: python tmp/build_sinofert_official_reports_20260905.py
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: sinofert-00297-broker-research-reports
+          path: out_sinofert_broker_reports_20260905/Sinofert_00297_Broker_Research_Reports_3.pdfs.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
