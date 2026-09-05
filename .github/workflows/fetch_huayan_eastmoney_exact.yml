@@ -1,0 +1,28 @@
+name: Fetch exact Huayan reports from Eastmoney
+
+on:
+  push:
+    branches:
+      - tmp/huayan-eastmoney-exact-v2
+
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests pypdf
+      - name: Fetch metadata and original PDFs
+        run: python tmp/fetch_huayan_eastmoney_exact.py
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: huayan-eastmoney-exact
+          path: out_huayan_eastmoney_exact/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
