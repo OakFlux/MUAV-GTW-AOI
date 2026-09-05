@@ -1,0 +1,31 @@
+name: Inspect China Tower broker report pages and public attachments
+
+on:
+  push:
+    branches:
+      - tmp/china-tower-report-pages-inspect-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Inspect pages, DOM and network
+        run: node tmp/inspect_china_tower_report_pages.mjs
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: china-tower-report-page-inspection
+          path: out_china_tower_report_pages_inspect/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
