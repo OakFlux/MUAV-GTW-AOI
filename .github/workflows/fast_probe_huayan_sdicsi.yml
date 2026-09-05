@@ -1,0 +1,21 @@
+name: Fast probe Huayan SDICSI report file
+on:
+  push:
+    branches: [tmp/huayan-sdicsi-fast-probe-20260905]
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet 'httpx[http2]'
+      - run: python tmp/fast_probe_huayan_sdicsi.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huayan-sdicsi-fast-probe
+          path: out_huayan_sdicsi_fast/*
+          if-no-files-found: error
+          retention-days: 1
