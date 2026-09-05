@@ -1,0 +1,21 @@
+name: Inspect Nxny Huayan report pages
+on:
+  push:
+    branches: [tmp/huayan-nxny-20260905]
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install --quiet 'httpx[http2]' pypdf
+      - run: python tmp/inspect_nxny_huayan.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huayan-nxny-inspection
+          path: out_huayan_nxny/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
