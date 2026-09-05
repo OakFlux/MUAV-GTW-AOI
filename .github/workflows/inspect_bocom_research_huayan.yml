@@ -1,0 +1,30 @@
+name: Inspect official BOCOM research portal for Huayan Robotics
+
+on:
+  push:
+    branches:
+      - tmp/huayan-bocom-research-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser
+        run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Inspect public portal and search
+        run: node tmp/inspect_bocom_research_huayan.mjs
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: huayan-bocom-research-inspection
+          path: out_huayan_bocom_research/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 6
