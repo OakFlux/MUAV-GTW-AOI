@@ -1,0 +1,24 @@
+name: Inspect FxBaogao public report API and bundles
+
+on:
+  push:
+    branches:
+      - tmp/fxbaogao-api-inspect-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet 'httpx[http2]'
+      - run: python tmp/inspect_fxbaogao_api_20260905.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fxbaogao-api-inspection
+          path: out_fxbaogao_api_inspect/*
+          if-no-files-found: error
+          retention-days: 1
