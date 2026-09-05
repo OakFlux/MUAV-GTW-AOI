@@ -1,0 +1,30 @@
+name: Inspect Xinyi Solar broker report public sources
+
+on:
+  push:
+    branches:
+      - tmp/xinyi-solar-broker-reports-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet requests pypdf playwright
+          npx playwright install --with-deps chromium
+      - name: Inspect and download public report files
+        run: python tmp/inspect_xinyi_solar_report_sources_20260905.py
+      - name: Upload inspection results
+        uses: actions/upload-artifact@v4
+        with:
+          name: xinyi-solar-report-source-inspection
+          path: out_xinyi_solar_report_inspection/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
