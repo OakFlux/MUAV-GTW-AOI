@@ -1,0 +1,28 @@
+name: Inspect Sina Huayan 1021 report pages and attachments
+
+on:
+  push:
+    branches:
+      - tmp/huayan-sina-report-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet 'httpx[http2]' pypdf
+      - name: Inspect public report pages
+        run: python tmp/inspect_sina_huayan_reports.py
+      - name: Upload diagnostics and PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: huayan-sina-report-inspection
+          path: out_huayan_sina_report/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
