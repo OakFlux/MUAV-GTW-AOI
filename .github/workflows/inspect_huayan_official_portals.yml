@@ -1,0 +1,27 @@
+name: Inspect official Huayan broker research portals
+
+on:
+  push:
+    branches:
+      - tmp/huayan-official-portals-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - run: node tmp/inspect_huayan_official_portals.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: huayan-official-portals-inspection
+          path: out_huayan_official_portals/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 6
