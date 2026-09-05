@@ -1,0 +1,30 @@
+name: Inspect public full-view access for Sinofert broker reports
+
+on:
+  push:
+    branches:
+      - tmp/sinofert-broker-reports-20260905
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Inspect public report views and network
+        run: node tmp/inspect_fxbaogao_full_view_20260905.mjs
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: sinofert-fxbaogao-full-view-inspection
+          path: out_sinofert_fxbaogao_full_view/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 6
