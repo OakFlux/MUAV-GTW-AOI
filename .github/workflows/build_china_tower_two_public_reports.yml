@@ -1,0 +1,31 @@
+name: Build China Tower two public broker report PDFs
+
+on:
+  push:
+    branches:
+      - tmp/china-tower-two-hangyan-pdfs-20260905
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PDF tools
+        run: |
+          python -m pip install --quiet requests pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Download and validate reports
+        run: python tmp/build_china_tower_two_public_reports.py
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: china-tower-00788-two-broker-reports
+          path: out_china_tower_two_reports/China_Tower_00788_Broker_Research_Reports_2.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
