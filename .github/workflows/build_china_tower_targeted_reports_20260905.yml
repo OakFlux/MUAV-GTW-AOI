@@ -1,0 +1,31 @@
+name: Build targeted China Tower broker report package
+
+on:
+  push:
+    branches:
+      - tmp/china-tower-targeted-reports-20260905
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet requests pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Download and validate selected reports
+        run: python tmp/build_china_tower_targeted_reports_20260905.py
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: china-tower-00788-targeted-broker-reports
+          path: out_china_tower_targeted_20260905/China_Tower_00788_Broker_Research_Reports.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
