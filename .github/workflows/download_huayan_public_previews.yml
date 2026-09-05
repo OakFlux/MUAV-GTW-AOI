@@ -1,0 +1,28 @@
+name: Download public Huayan report previews
+
+on:
+  push:
+    branches:
+      - tmp/huayan-public-previews-20260905
+
+jobs:
+  download:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests pillow
+      - name: Download and inspect public previews
+        run: python tmp/download_huayan_public_previews.py
+      - name: Upload files
+        uses: actions/upload-artifact@v4
+        with:
+          name: huayan-public-previews
+          path: out_huayan_public_previews/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
