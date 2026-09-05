@@ -1,0 +1,31 @@
+name: Search Hangyan for China Tower reports
+
+on:
+  push:
+    branches:
+      - tmp/hangyan-china-tower-search-20260905
+
+jobs:
+  search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Search Hangyan and inspect report attachments
+        run: node tmp/search_hangyan_china_tower.mjs
+      - name: Upload diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: hangyan-china-tower-search
+          path: out_hangyan_china_tower_search/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
