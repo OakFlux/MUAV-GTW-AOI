@@ -1,0 +1,33 @@
+name: Download Kerry Properties 2026 interim results
+
+on:
+  push:
+    branches:
+      - tmp/kerry-interim-only-20260906
+
+jobs:
+  download:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet requests pypdf fonttools
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Download and validate official PDF
+        run: python tmp/download_kerry_interim_20260906.py
+      - name: Upload official interim results PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: kerry-properties-00683-2026-interim-results
+          path: |
+            out_kerry_interim_20260906/Kerry_Properties_00683_2026_Interim_Results_Announcement.pdf
+            out_kerry_interim_20260906/metadata.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
