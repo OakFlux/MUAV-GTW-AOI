@@ -1,0 +1,51 @@
+name: Minimal Ledong report page probe
+
+on:
+  push:
+    branches:
+      - chatgpt-temp-ledong-robotics-reports-20260906
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe selected page URLs quickly
+        shell: bash
+        run: |
+          set +e
+          mkdir -p out
+          python3 - <<'PY'
+          import concurrent.futures, json, urllib.request, urllib.error
+          reports={
+            '5593366':('2026/08/10',list(range(1,31))),
+            '5608254':('2026/08/16',list(range(1,41))),
+          }
+          def one(args):
+            rid,date,p=args
+            u=f'https://public.fxbaogao.com/report-image/{date}/{rid}-{p}.png?x-oss-process=image/format,webp'
+            req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0','Referer':f'https://www.fxbaogao.com/view?id={rid}','Range':'bytes=0-2047'})
+            try:
+              with urllib.request.urlopen(req,timeout=12) as r:
+                data=r.read(2048); ct=r.headers.get('Content-Type',''); n=r.headers.get('Content-Length')
+                valid=r.status in (200,206) and len(data)>100 and (ct.startswith('image/') or data.startswith(b'RIFF') or data.startswith(b'\x89PNG'))
+                return {'rid':rid,'page':p,'status':r.status,'type':ct,'length':n,'sample':len(data),'valid':valid,'url':u}
+            except urllib.error.HTTPError as e:
+              return {'rid':rid,'page':p,'status':e.code,'valid':False,'url':u}
+            except Exception as e:
+              return {'rid':rid,'page':p,'error':repr(e),'valid':False,'url':u}
+          tasks=[(rid,date,p) for rid,(date,pages) in reports.items() for p in pages]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+            rows=list(ex.map(one,tasks))
+          print(json.dumps(rows,ensure_ascii=False,indent=2))
+          open('out/results.json','w').write(json.dumps(rows,ensure_ascii=False,indent=2))
+          for rid in reports:
+            good=[x['page'] for x in rows if x['rid']==rid and x.get('valid')]
+            print('GOOD',rid,good,'COUNT',len(good))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ledong_Minimal_Probe
+          path: out
+          retention-days: 2
