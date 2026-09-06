@@ -1,0 +1,31 @@
+name: Inspect public Qunabox reports on Futu Reportify and SGPJBG
+
+on:
+  push:
+    branches:
+      - tmp/hangyan-protected-link-20260906
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Inspect public report pages and downloads
+        run: node tmp/inspect_qunabox_futu_reports.mjs
+      - name: Upload diagnostics and public PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: qunabox-futu-report-inspection
+          path: out_qunabox_futu_report_inspection/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
