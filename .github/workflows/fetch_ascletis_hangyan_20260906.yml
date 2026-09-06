@@ -1,0 +1,28 @@
+name: Fetch Ascletis PDFs through Hangyan indexes
+
+on:
+  push:
+    branches:
+      - tmp/ascletis-broker-reports-20260906
+
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests beautifulsoup4 pypdf
+      - name: Resolve report pages and download public PDF attachments
+        run: python tmp/fetch_ascletis_hangyan.py
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-hangyan-results
+          path: out_ascletis_hangyan/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
