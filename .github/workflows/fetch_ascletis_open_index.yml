@@ -16,8 +16,8 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: python -m pip install --quiet requests pypdf
-      - name: Fetch directory index and reports
-        run: python tmp/fetch_ascletis_open_index.py
+      - name: Fetch directory index and reports via public DNS fallback
+        run: python tmp/fetch_ascletis_open_index_v2.py
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
