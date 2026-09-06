@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,15 +25,15 @@ jobs:
           python -m pip install --quiet pypdf
           sudo apt-get update -qq
           sudo apt-get install -y -qq poppler-utils
-      - name: Discover and download public report PDFs in a browser
-        run: node tmp/discover_ascletis_hangyan_browser_20260906.mjs
-      - name: Validate and package reports
-        run: python tmp/package_ascletis_browser_reports_20260906.py
+      - name: Resolve protected report links and download PDFs
+        run: node tmp/resolve_ascletis_protected_links_20260906.mjs
+      - name: Validate and package resolved reports
+        run: python tmp/package_ascletis_resolved_20260906.py
       - name: Upload verified package
         uses: actions/upload-artifact@v4
         with:
-          name: ascletis-01672-rebuilt-reports-v3
-          path: out_ascletis_browser_package/ascletis_01672_reports_v3.zip
+          name: ascletis-01672-reports-new
+          path: out_ascletis_final/ascletis_01672_reports_new.zip
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -41,10 +41,10 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ascletis-01672-browser-rebuild-diagnostics
+          name: ascletis-01672-resolver-diagnostics
           path: |
-            out_ascletis_browser_rebuild/*
-            out_ascletis_browser_package/*
+            out_ascletis_resolved/*
+            out_ascletis_final/*
           if-no-files-found: warn
           retention-days: 1
           compression-level: 0
