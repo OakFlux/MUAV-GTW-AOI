@@ -1,0 +1,83 @@
+name: Probe Ledong Robotics report APIs
+
+on:
+  push:
+    branches:
+      - chatgpt-temp-ledong-robotics-reports-20260906
+  workflow_dispatch:
+
+jobs:
+  probe-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install requests
+        run: python -m pip install --quiet requests
+      - name: Probe public anonymous API responses
+        shell: bash
+        run: |
+          mkdir -p api_output
+          cat > /tmp/probe_api.py <<'PY'
+          import json, requests, pathlib, itertools
+          OUT=pathlib.Path('api_output')
+          s=requests.Session()
+          s.headers.update({
+            'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
+            'Accept':'application/json, text/plain, */*',
+            'Accept-Language':'zh-CN,zh;q=0.9,en;q=0.8',
+            'Origin':'https://www.fxbaogao.com',
+            'Referer':'https://www.fxbaogao.com/view?id=5593366',
+            'Content-Type':'application/json; charset=UTF-8',
+          })
+          # Establish ordinary anonymous session; no login/auth bypass.
+          for u in ['https://www.fxbaogao.com/detail/5593366','https://www.fxbaogao.com/view?id=5593366','https://api.fxbaogao.com/mofoun/common/param/time']:
+            try:
+              r=s.get(u,timeout=25,allow_redirects=True)
+              print('SEED',u,r.status_code,r.url,r.headers.get('content-type'),len(r.content),'cookies',s.cookies.get_dict(),'text',r.text[:500])
+            except Exception as e: print('SEED_ERR',u,repr(e))
+          base='https://api.fxbaogao.com'
+          ids=['5593366','5608254','5637842','5646471']
+          calls=[]
+          for rid in ids:
+            bodies=[
+              {'id':int(rid)}, {'id':rid}, {'reportId':int(rid)}, {'reportId':rid},
+              {'docId':int(rid)}, {'docId':rid}, {'id':int(rid),'reportId':int(rid)},
+              {'reportId':int(rid),'isEnglish':False}, {'reportId':int(rid),'from':'view'},
+            ]
+            for method,path,body in [
+              *[('POST','/mofoun/report/searchReport/detail',b) for b in bodies],
+              *[('POST','/mofoun/report/readReport/readReport',b) for b in bodies],
+              ('GET',f'/mofoun/report/searchReport/detail?id={rid}',None),
+              ('GET',f'/mofoun/report/searchReport/detail?reportId={rid}',None),
+              ('GET',f'/mofoun/report/report/getReportPreviewImages?reportId={rid}',None),
+              ('GET',f'/mofoun/report/searchReport/detail/catalog?reportId={rid}',None),
+              ('GET',f'/mofoun/report/report/downloadReportByBean?reportId={rid}',None),
+              ('GET',f'/mofoun/report/report/file/downloadReport?reportId={rid}',None),
+              ('GET',f'/mofoun/report/report/report/preDownV2?reportId={rid}',None),
+              ('POST',f'/mofoun/report/report/report/isDownload',{'reportIds':[int(rid)]}),
+            ]:
+              calls.append((rid,method,path,body))
+          for idx,(rid,method,path,body) in enumerate(calls):
+            url=base+path
+            try:
+              if method=='POST': r=s.post(url,json=body,timeout=30,allow_redirects=True)
+              else: r=s.get(url,timeout=30,allow_redirects=True)
+              text=r.text
+              rec={'rid':rid,'method':method,'path':path,'body':body,'status':r.status_code,'url':r.url,
+                   'content_type':r.headers.get('content-type'),'bytes':len(r.content),'headers':dict(r.headers),'text':text[:20000]}
+              (OUT/f'{idx:03d}_{rid}_{method}.json').write_text(json.dumps(rec,ensure_ascii=False,indent=2),encoding='utf-8')
+              interesting=any(k in text.lower() for k in ('pdf','href','fileurl','urlpdf','preview','pagecount','pagenum','oss','reportname','reporttitle','乐动','樂動'))
+              print('CALL',idx,rid,method,path,'body',body,'=>',r.status_code,r.url,r.headers.get('content-type'),len(r.content),'interesting',interesting,'text',text[:2500])
+            except Exception as e:
+              print('CALL_ERR',idx,rid,method,path,body,repr(e))
+          PY
+          python /tmp/probe_api.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ledong_Robotics_API_Probe
+          path: api_output
+          retention-days: 2
+          if-no-files-found: error
