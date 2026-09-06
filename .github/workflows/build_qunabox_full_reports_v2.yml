@@ -1,0 +1,49 @@
+name: Build Qunabox complete broker report package v2
+
+on:
+  push:
+    branches:
+      - tmp/qunabox-full-reports-20260906-v2
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser and PDF tools
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Discover and download public complete PDFs
+        run: node tmp/fetch_qunabox_full_reports_v2.mjs
+      - name: Validate distinct reports and package
+        run: python tmp/package_qunabox_full_reports_v2.py
+      - name: Upload verified package
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qunabox-00917-complete-broker-reports-v2
+          path: out_qunabox_full_reports_v2/Qunabox_00917_Broker_Deep_Research_Reports.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qunabox-00917-diagnostics-v2
+          path: out_qunabox_full_reports_v2/*
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 6
