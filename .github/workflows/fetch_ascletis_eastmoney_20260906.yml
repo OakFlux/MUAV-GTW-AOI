@@ -1,0 +1,28 @@
+name: Fetch Ascletis broker PDFs from Eastmoney
+
+on:
+  push:
+    branches:
+      - tmp/ascletis-broker-reports-20260906
+
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests pypdf
+      - name: Search report metadata and download public PDFs
+        run: python tmp/fetch_ascletis_eastmoney.py
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-eastmoney-results
+          path: out_ascletis_eastmoney/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
