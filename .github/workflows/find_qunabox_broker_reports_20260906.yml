@@ -1,0 +1,31 @@
+name: Find Qunabox broker research reports
+
+on:
+  push:
+    branches:
+      - tmp/qunabox-broker-reports-20260906
+
+jobs:
+  find:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Search public sources and download PDFs
+        run: node tmp/find_qunabox_broker_reports_20260906.mjs
+      - name: Upload report search results
+        uses: actions/upload-artifact@v4
+        with:
+          name: qunabox-broker-report-search
+          path: out_qunabox_broker_reports_20260906/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
