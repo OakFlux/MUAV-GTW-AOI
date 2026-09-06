@@ -1,0 +1,31 @@
+name: Search and build Qunabox Sdyanbao reports
+
+on:
+  push:
+    branches:
+      - tmp/qunabox-sdyanbao-search-20260906
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright pdf-lib
+          npx playwright install --with-deps chromium
+      - name: Search reports and reconstruct complete PDFs
+        run: node tmp/search_build_qunabox_sdyanbao_reports.mjs
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: qunabox-sdyanbao-reports
+          path: out_qunabox_sdyanbao/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
