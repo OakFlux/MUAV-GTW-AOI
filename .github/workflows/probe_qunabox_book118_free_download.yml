@@ -1,0 +1,31 @@
+name: Probe public free download for Qunabox BOCI report
+
+on:
+  push:
+    branches:
+      - tmp/hangyan-protected-link-20260906
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Probe only public free-download controls
+        run: node tmp/probe_qunabox_book118_free_download.mjs
+      - name: Upload diagnostics and any public downloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: qunabox-book118-public-download-probe
+          path: out_qunabox_book118_probe/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
