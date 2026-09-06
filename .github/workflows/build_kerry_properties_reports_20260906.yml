@@ -1,0 +1,45 @@
+name: Build Kerry Properties annual and latest interim report package
+
+on:
+  push:
+    branches:
+      - tmp/kerry-properties-reports-20260906
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install download and PDF validation tools
+        run: |
+          python -m pip install --quiet requests beautifulsoup4 pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Download, validate and package official reports
+        run: python tmp/build_kerry_properties_reports_20260906.py
+
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: kerry-properties-00683-financial-reports
+          path: out_kerry_properties_20260906/Kerry_Properties_00683_2020_2025_Annual_Reports_2026_Interim_Results.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kerry-properties-00683-diagnostics
+          path: out_kerry_properties_20260906/*
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 6
