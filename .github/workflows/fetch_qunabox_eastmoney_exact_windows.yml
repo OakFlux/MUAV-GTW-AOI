@@ -1,0 +1,28 @@
+name: Fetch Qunabox reports from exact Eastmoney windows
+
+on:
+  push:
+    branches:
+      - tmp/hangyan-protected-link-20260906
+
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests pypdf
+      - name: Search exact windows and download public PDFs
+        run: python tmp/fetch_qunabox_eastmoney_exact_windows.py
+      - name: Upload diagnostics and any PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: qunabox-eastmoney-exact-windows
+          path: out_qunabox_eastmoney_exact/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
