@@ -1,0 +1,40 @@
+name: Rebuild Ascletis broker report package from public Hangyan pages
+
+on:
+  push:
+    branches:
+      - tmp/ascletis-hangyan-rebuild-20260906
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet requests beautifulsoup4 pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Discover, download, validate and package reports
+        run: python tmp/rebuild_ascletis_hangyan_reports_20260906.py
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-01672-rebuilt-reports
+          path: out_ascletis_hangyan_rebuild/ascletis_01672_reports_new.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-01672-rebuild-diagnostics
+          path: out_ascletis_hangyan_rebuild/*
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 0
