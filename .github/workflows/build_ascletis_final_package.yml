@@ -1,0 +1,60 @@
+name: Build final Ascletis broker report package
+
+on:
+  push:
+    branches:
+      - tmp/ascletis-broker-reports-20260906
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser and PDF dependencies
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet requests pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Run targeted browser collection
+        run: node tmp/collect_ascletis_deep_v2.mjs
+      - name: Run Eastmoney and Sina collection
+        run: python tmp/collect_ascletis_eastmoney_sina.py
+      - name: Re-run basic public collection for Hangyan fallback
+        run: node tmp/collect_ascletis_browser.mjs
+      - name: Validate and package actual PDFs
+        run: python tmp/package_ascletis_reports.py
+      - name: Commit package and status to temporary branch
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f deliverables/ascletis_01672_status.json || true
+          if [ -f deliverables/ascletis_01672_reports.zip ]; then
+            git add -f deliverables/ascletis_01672_reports.zip
+          fi
+          git commit -m 'Add verified Ascletis broker report package' || true
+          git push origin HEAD:tmp/ascletis-broker-reports-20260906
+      - name: Upload final package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-01672-final-package
+          path: |
+            deliverables/ascletis_01672_reports.zip
+            deliverables/ascletis_01672_status.json
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 0
