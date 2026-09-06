@@ -1,0 +1,33 @@
+name: Inspect exact Q Technology title results 20260906
+
+on:
+  push:
+    paths:
+      - '.github/workflows/qtech-exact-title-results-20260906.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Query exact title fragments
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, urllib.request
+          endpoint='https://api.sdyanbao.com/api/file/search'
+          for keyword in ['安卓光学升规','手机光学驱动利润弹性','车载 IoT高速成长','高端光学模组收益弹性高']:
+            body={'device':1,'hideTrader':0,'onlyTitle':0,'order':0,'page':1,'pageSize':100,'keyword':keyword,'pageCount':'','dateRange':'','startTime':'','endTime':'','typeIds':[],'industryIds':[],'opFrom':1}
+            req=urllib.request.Request(endpoint,data=json.dumps(body,ensure_ascii=False).encode(),headers={'Content-Type':'application/json','User-Agent':'Mozilla/5.0','Referer':'https://www.sdyanbao.com/','Origin':'https://www.sdyanbao.com','device':'1'},method='POST')
+            with urllib.request.urlopen(req,timeout=60) as r: payload=json.loads(r.read().decode())
+            rows=(payload.get('data') or {}).get('files') or []
+            compact=[]
+            for x in rows:
+              compact.append({'id':x.get('id'),'name':x.get('name'),'date':x.get('time_text'),'pages':x.get('page_count'),'page_url':x.get('page_url'),'uuid':x.get('data_source_uuid'),'data_source':x.get('data_source'),'type':(x.get('type') or {}).get('name'),'org':(x.get('organization') or {}).get('name'),'researcher':(x.get('researcher') or {}).get('name'),'stock':x.get('stock')})
+            print('KEYWORD',keyword,'RESULTS',json.dumps(compact,ensure_ascii=False,indent=2),flush=True)
+          PY
