@@ -1,0 +1,22 @@
+name: Search Ascletis reports in Eastmoney and Sina
+on:
+  push:
+    branches:
+      - tmp/ascletis-eastmoney-sina-20260906
+jobs:
+  search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet requests beautifulsoup4 pypdf
+      - run: python tmp/search_ascletis_eastmoney_sina_20260906.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-eastmoney-sina-results
+          path: out_ascletis_eastmoney_sina/*
+          retention-days: 1
+          compression-level: 0
