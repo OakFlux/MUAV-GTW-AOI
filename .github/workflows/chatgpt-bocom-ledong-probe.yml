@@ -1,0 +1,114 @@
+name: Probe public BOCOM research site for Ledong Robotics
+
+on:
+  push:
+    branches:
+      - chatgpt-temp-ledong-robotics-reports-20260906
+  workflow_dispatch:
+
+jobs:
+  probe-bocom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests beautifulsoup4
+      - name: Inspect public pages, scripts, sitemaps and search endpoints
+        shell: bash
+        run: |
+          mkdir -p output
+          cat > /tmp/probe_bocom.py <<'PY'
+          from __future__ import annotations
+          import json, re, urllib.parse, gzip
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('output')
+          s=requests.Session(); s.headers.update({
+              'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
+              'Accept-Language':'zh-CN,zh;q=0.9,en;q=0.8',
+              'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8',
+          })
+          base='https://research.bocomgroup.com'
+          seeds=[
+              base+'/', base+'/robots.txt', base+'/sitemap.xml', base+'/sitemap_index.xml',
+              base+'/zh-hans', base+'/zh-cn', base+'/cn', base+'/search', base+'/login',
+              base+'/?s=%E4%B9%90%E5%8A%A8%E6%9C%BA%E5%99%A8%E4%BA%BA',
+              base+'/search?keyword=%E4%B9%90%E5%8A%A8%E6%9C%BA%E5%99%A8%E4%BA%BA',
+              base+'/search?q=1236', base+'/search?search=1236',
+          ]
+          resource_urls=[]; discovered=[]
+          pattern=re.compile(r'https?://[^\"\'<>\\\s]+|[^\"\'<>\\\s]{0,300}(?:api|ajax|search|report|pdf|download|attachment|file|1236|乐动|樂動)[^\"\'<>\\\s]{0,1200}',re.I)
+          for idx,u in enumerate(seeds):
+              try:
+                  r=s.get(u,timeout=45,allow_redirects=True)
+                  print('\nSEED',idx,u,'=>',r.status_code,r.url,r.headers.get('content-type'),len(r.content),'cookies',s.cookies.get_dict())
+                  print(r.text[:4000])
+                  (OUT/f'seed_{idx}.bin').write_bytes(r.content)
+                  if 'html' in str(r.headers.get('content-type')):
+                      soup=BeautifulSoup(r.text,'html.parser')
+                      print('TITLE',idx,soup.title.get_text(' ',strip=True) if soup.title else '')
+                      print('TEXT',idx,' '.join(soup.stripped_strings)[:7000])
+                      for tag in soup.find_all(['script','link','a','iframe','embed','object','form']):
+                          for attr in ('src','href','action','data'):
+                              v=tag.get(attr)
+                              if not v: continue
+                              full=urllib.parse.urljoin(r.url,v)
+                              if tag.name in ('script','link','iframe','embed','object','form'): resource_urls.append(full)
+                              if any(k in full.lower() for k in ('search','report','pdf','download','api','ajax','1236')):
+                                  print('RESOURCE',idx,tag.name,attr,full)
+                              discovered.append(full)
+                  hits=list(dict.fromkeys(pattern.findall(r.text)))
+                  (OUT/f'seed_{idx}_hits.txt').write_text('\n'.join(hits),encoding='utf-8')
+                  for h in hits:
+                      if any(k in h.lower() for k in ('api','ajax','search','report','pdf','download','attachment','file','1236')) or '乐动' in h or '樂動' in h:
+                          print('HIT',idx,repr(h[:4000]))
+              except Exception as e: print('SEED_ERR',idx,u,repr(e))
+
+          for idx,u in enumerate(dict.fromkeys(resource_urls)):
+              if idx>80: break
+              try:
+                  r=s.get(u,timeout=45,allow_redirects=True)
+                  ct=str(r.headers.get('content-type') or '')
+                  print('\nRESOURCE_FETCH',idx,u,'=>',r.status_code,r.url,ct,len(r.content))
+                  (OUT/f'resource_{idx:03d}.bin').write_bytes(r.content)
+                  if any(x in ct for x in ('text','json','javascript','xml')) or u.lower().split('?')[0].endswith(('.js','.css','.json','.xml','.txt')):
+                      text=r.text
+                      for h in list(dict.fromkeys(pattern.findall(text))):
+                          if any(k in h.lower() for k in ('api','ajax','search','report','pdf','download','attachment','file','1236')) or '乐动' in h or '樂動' in h:
+                              print('RESOURCE_HIT',idx,repr(h[:5000]))
+              except Exception as e: print('RESOURCE_ERR',idx,u,repr(e))
+
+          # Test conventional read-only API/search patterns discovered or common to modern sites.
+          queries=['乐动机器人','樂動機器人','1236','01236','物理AI双曲线','从感知组件到智能庭院']
+          endpoints=[]
+          for q in queries:
+              enc=urllib.parse.quote(q)
+              endpoints += [
+                  f'{base}/api/search?q={enc}', f'{base}/api/search?keyword={enc}',
+                  f'{base}/api/research/search?q={enc}', f'{base}/api/report/search?q={enc}',
+                  f'{base}/search/api?q={enc}', f'{base}/search?query={enc}',
+                  f'{base}/Search/Index?keyword={enc}', f'{base}/api/v1/search?keyword={enc}',
+              ]
+          for idx,u in enumerate(endpoints):
+              try:
+                  r=s.get(u,timeout=25,allow_redirects=True)
+                  text=r.text
+                  interesting=(r.status_code==200 and len(r.content)>50 and any(k in text for k in ('乐动','樂動','1236','01236','物理AI','感知组件')))
+                  if interesting or r.status_code not in (404,405):
+                      print('\nENDPOINT',idx,u,'=>',r.status_code,r.url,r.headers.get('content-type'),len(r.content),'interesting',interesting,text[:8000])
+                      (OUT/f'endpoint_{idx:03d}.bin').write_bytes(r.content)
+              except Exception as e: print('ENDPOINT_ERR',idx,u,repr(e))
+          PY
+          python /tmp/probe_bocom.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BOCOM_Ledong_Public_Probe
+          path: output
+          retention-days: 2
+          if-no-files-found: error
+          compression-level: 6
