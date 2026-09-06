@@ -1,0 +1,31 @@
+name: Collect public Ascletis broker report PDFs
+
+on:
+  push:
+    branches:
+      - tmp/ascletis-broker-reports-20260906
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Collect public PDF resources
+        run: node tmp/collect_ascletis_browser.mjs
+      - name: Upload collected PDFs and diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-01672-report-collection
+          path: out_ascletis_20260906/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
