@@ -1,0 +1,28 @@
+name: Collect Ascletis reports from Eastmoney and Sina
+
+on:
+  push:
+    branches:
+      - tmp/ascletis-broker-reports-20260906
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests pypdf
+      - name: Search and download public PDFs
+        run: python tmp/collect_ascletis_eastmoney_sina.py
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-01672-eastmoney-sina
+          path: out_ascletis_eastmoney_sina/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
