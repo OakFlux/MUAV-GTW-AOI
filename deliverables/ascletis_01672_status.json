@@ -1,0 +1,47 @@
+{
+  "success": true,
+  "zip": "deliverables/ascletis_01672_reports.zip",
+  "zip_bytes": 413344,
+  "zip_sha256": "de03e65b662008680a6bf9f030132af4d3088d1be49335ce377b8461e66e040d",
+  "manifest": [
+    {
+      "index": 1,
+      "broker": "国元国际控股",
+      "date": "2024-09-02",
+      "title": "创新药研发推进顺利，BD合作空间广阔",
+      "pages": 2,
+      "completeness": "完整券商公司研究/行业专题（短篇）",
+      "filename": "01_国元国际控股_2024-09-02_Ascletis_01672_Research_2p.pdf",
+      "bytes": 324282,
+      "sha256": "980839aeb3b9cde04c6b7c34aef205de26696bc36ac08713989fde10cddb7889",
+      "source_page": "https://www.hangyan.co/reports/3448696034581022433",
+      "source_pdf": "https://cdn.hangyan.co/documents/98/980839aeb3b9cde04c6b7c34aef205de26696bc36ac08713989fde10cddb7889.pdf"
+    },
+    {
+      "index": 2,
+      "broker": "券商研究机构",
+      "date": "",
+      "title": "reportify_endpoint_1218190322589372416_nested_1992cbe115d1",
+      "pages": 2,
+      "completeness": "完整券商公司研究/行业专题（短篇）",
+      "filename": "02_券商研究机构_undated_Ascletis_01672_Research_2p.pdf",
+      "bytes": 76300,
+      "sha256": "1992cbe115d18f28af046c67b67e33589e10c3a8af4161afb24ac4189a6678a8",
+      "source_page": "",
+      "source_pdf": "https://s.reportify.cn/r/n_232441853_1c18d842f1982a2e881a0d6bce465b0a_20260209105532.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIA4U3D9N8K2QH7X5BJ%2F20260906%2Fap-beijing%2Fs3%2Faws4_request&X-Amz-Date=20260906T060723Z&X-Amz-Expires=600&X-Amz-SignedHeaders=host&X-Amz-Signature=df1c242d8c6ac0fa8556226b4abfc59cf9a95ecb0985b613c994521ef697b97b"
+    },
+    {
+      "index": 3,
+      "broker": "券商研究机构",
+      "date": "",
+      "title": "reportify_endpoint_1193925642807283712_nested_f7dd67c58274",
+      "pages": 2,
+      "completeness": "完整券商公司研究/行业专题（短篇）",
+      "filename": "03_券商研究机构_undated_Ascletis_01672_Research_2p.pdf",
+      "bytes": 80245,
+      "sha256": "f7dd67c582748c3134968a827041dd95ad13d81521f155c8fabacb60a9f27d73",
+      "source_page": "",
+      "source_pdf": "https://s.reportify.cn/r/n_226083088_cf9eed8ecfdf6307aa635090227acce7_20251204120121.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIA4U3D9N8K2QH7X5BJ%2F20260906%2Fap-beijing%2Fs3%2Faws4_request&X-Amz-Date=20260906T061405Z&X-Amz-Expires=600&X-Amz-SignedHeaders=host&X-Amz-Signature=1927da5bf215cc353409edad817bba28c3f00fd16e9acc41893faf58ee6c910f"
+    }
+  ]
+}
