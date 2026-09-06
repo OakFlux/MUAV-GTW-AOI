@@ -1,0 +1,31 @@
+name: Probe public Reportify Ascletis PDF resources
+
+on:
+  push:
+    branches:
+      - tmp/ascletis-broker-reports-20260906
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Probe public report pages and APIs
+        run: node tmp/probe_ascletis_reportify.mjs
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascletis-reportify-probe
+          path: out_ascletis_reportify_probe/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
