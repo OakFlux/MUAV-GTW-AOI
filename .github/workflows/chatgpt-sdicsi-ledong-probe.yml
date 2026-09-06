@@ -1,0 +1,98 @@
+name: Probe official SDICSI Ledong report
+
+on:
+  push:
+    branches:
+      - chatgpt-temp-ledong-robotics-reports-20260906
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --quiet requests beautifulsoup4
+      - name: Inspect official site pages, assets, APIs and attachments
+        shell: bash
+        run: |
+          mkdir -p output
+          cat > /tmp/probe_sdicsi.py <<'PY'
+          from __future__ import annotations
+          import json, re, urllib.parse
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('output')
+          s=requests.Session(); s.headers.update({'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36','Accept-Language':'zh-CN,zh;q=0.9,en;q=0.8'})
+          pages=[
+            'https://www.sdicsi.com.hk/cn/research-report',
+            'https://www.sdicsi.com.hk/cn/research-report/company-report',
+            'https://www.sdicsi.com.hk/cn/research-report/tag/1236hk',
+            'https://www.sdicsi.com.hk/cn/research-report/tag/01236hk',
+            'https://www.sdicsi.com.hk/zh/research-report/tag/1236hk',
+            'https://www.sdicsi.com.hk/zh/research-report/tag/01236hk',
+          ]
+          resources=[]
+          pattern=re.compile(r'https?://[^\"\'<>\\\s]+|[^\"\'<>\\\s]{0,250}(?:ajax|api|loadmore|load-more|page|report|pdf|attachment|file|download|1236|乐动|樂動)[^\"\'<>\\\s]{0,1000}',re.I)
+          for i,u in enumerate(pages):
+            try:
+              r=s.get(u,timeout=45,allow_redirects=True)
+              print('\nPAGE',i,u,'=>',r.status_code,r.url,r.headers.get('content-type'),len(r.content))
+              print(r.text[:1200])
+              (OUT/f'page_{i}.html').write_bytes(r.content)
+              soup=BeautifulSoup(r.text,'html.parser')
+              print('TEXT',i,' '.join(soup.stripped_strings)[:5000])
+              for tag in soup.find_all(['script','link','iframe','a','img']):
+                for attr in ('src','href'):
+                  v=tag.get(attr)
+                  if not v: continue
+                  full=urllib.parse.urljoin(r.url,v)
+                  if tag.name in ('script','link','iframe'): resources.append(full)
+                  if any(k in full.lower() for k in ('pdf','report','download','api','ajax','1236')):
+                    print('RESOURCE',i,tag.name,attr,full)
+              hits=list(dict.fromkeys(pattern.findall(r.text)))
+              (OUT/f'page_{i}_hits.txt').write_text('\n'.join(hits),encoding='utf-8')
+              for h in hits:
+                if any(k in h.lower() for k in ('ajax','api','loadmore','load-more','pdf','attachment','download','1236','乐动','樂動')):
+                  print('HIT',i,repr(h[:3000]))
+            except Exception as e: print('PAGE_ERR',i,u,repr(e))
+
+          for i,u in enumerate(dict.fromkeys(resources)):
+            if not any(u.lower().split('?')[0].endswith(ext) for ext in ('.js','.json')): continue
+            try:
+              r=s.get(u,timeout=45,allow_redirects=True); r.raise_for_status()
+              (OUT/f'asset_{i:03d}.txt').write_bytes(r.content)
+              print('\nASSET',i,u,len(r.content))
+              hits=list(dict.fromkeys(pattern.findall(r.text)))
+              for h in hits:
+                if any(k in h.lower() for k in ('ajax','api','loadmore','load-more','pdf','attachment','download','1236','乐动','樂動','research-report')):
+                  print('ASSET_HIT',i,repr(h[:3500]))
+            except Exception as e: print('ASSET_ERR',i,u,repr(e))
+
+          # Common WordPress/Drupal-style discovery endpoints, read-only.
+          endpoints=[
+            'https://www.sdicsi.com.hk/wp-json/wp/v2/search?search=%E4%B9%90%E5%8A%A8%E6%9C%BA%E5%99%A8%E4%BA%BA&per_page=100',
+            'https://www.sdicsi.com.hk/wp-json/wp/v2/search?search=1236&per_page=100',
+            'https://www.sdicsi.com.hk/wp-json/wp/v2/posts?search=1236&per_page=100',
+            'https://www.sdicsi.com.hk/cn/search?search=1236',
+            'https://www.sdicsi.com.hk/cn/search?q=1236',
+          ]
+          for j,u in enumerate(endpoints):
+            try:
+              r=s.get(u,timeout=40,allow_redirects=True)
+              print('\nENDPOINT',j,u,'=>',r.status_code,r.url,r.headers.get('content-type'),len(r.content),r.text[:5000])
+              (OUT/f'endpoint_{j}.txt').write_bytes(r.content)
+            except Exception as e: print('ENDPOINT_ERR',j,u,repr(e))
+          PY
+          python /tmp/probe_sdicsi.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SDICSI_Ledong_Official_Probe
+          path: output
+          retention-days: 2
+          if-no-files-found: error
