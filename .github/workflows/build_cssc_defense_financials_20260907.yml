@@ -22,6 +22,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq poppler-utils
 
+      - name: Apply HKEX annual-report filtering fix
+        run: python tmp/patch_cssc_defense_financials_20260907.py
+
       - name: Download, validate and package official reports
         run: python tmp/build_cssc_defense_financials_20260907.py
 
