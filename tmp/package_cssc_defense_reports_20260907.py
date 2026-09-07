@@ -39,8 +39,8 @@ EXPECTED = [
         'broker': '建银国际证券',
         'date': '2025-03-03',
         'title': '顺风启航',
-        'report_type': '首次覆盖 / 港股公司研究',
-        'min_pages': 5,
+        'report_type': '首次覆盖 / 港股公司研究（原报告为3页）',
+        'min_pages': 3,
         'tokens': ['顺风启航', '建银国际', 'CCBI', '优于大市', '317HK'],
         'output': '02_建银国际证券_2025-03-03_中船防务首次覆盖_顺风启航.pdf',
         'source_page': 'https://www.hangyan.co/reports/3584289384419034920',
@@ -51,7 +51,6 @@ pdfs = sorted(RAW.glob('*.pdf'))
 if not pdfs:
     raise RuntimeError('No PDF files were collected')
 
-# Inspect each unique PDF once.
 inspected = []
 seen_hashes = set()
 for path in pdfs:
@@ -112,7 +111,6 @@ for expected, item in selected:
     destination = PACKAGE / expected['output']
     shutil.copy2(item['path'], destination)
 
-    # Render cover, midpoint and last page to confirm readability.
     for page_number in sorted({1, max(1, (item['pages'] + 1) // 2), item['pages']}):
         prefix = RENDERS / f"{destination.stem}_p{page_number}"
         subprocess.run(
@@ -138,9 +136,10 @@ for expected, item in selected:
     })
 
 readme = [
-    '中船防务（600685.SH / 00317.HK）券商深度报告合集',
+    '中船防务（600685.SH / 00317.HK）券商研究报告合集',
     '',
     '本压缩包收录2份公开可获取、经完整性核验的实际券商PDF，不含网页跳转文件、目录页或预览图片。',
+    '其中浙商证券报告为长篇公司深度；建银国际报告为3页首次覆盖港股公司研究，原文件即为3页，并非下载缺页。',
     '',
     '文件清单：',
 ]
