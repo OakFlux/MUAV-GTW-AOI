@@ -1,0 +1,40 @@
+name: Build CGN New Energy fast public report package
+
+on:
+  push:
+    branches:
+      - tmp/cgnne-fast-public-reports-20260907
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet requests beautifulsoup4 pypdf fonttools
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+      - name: Download, validate and package reports
+        run: python tmp/build_cgnne_fast_public_reports.py
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: cgnne-01811-fast-public-reports
+          path: out_cgnne_fast_20260907/CGN_New_Energy_01811_Broker_Reports.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cgnne-fast-diagnostics
+          path: out_cgnne_fast_20260907/*
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 6
