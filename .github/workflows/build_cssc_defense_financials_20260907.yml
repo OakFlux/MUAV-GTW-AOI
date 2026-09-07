@@ -1,0 +1,45 @@
+name: Build CSSC Offshore Defense financial report package
+
+on:
+  push:
+    branches:
+      - tmp/cssc-defense-financials-20260907
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install download and PDF validation tools
+        run: |
+          python -m pip install --quiet requests beautifulsoup4 pypdf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Download, validate and package official reports
+        run: python tmp/build_cssc_defense_financials_20260907.py
+
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: cssc-defense-600685-00317-financial-reports
+          path: out_cssc_defense_financials_20260907/CSSC_Defense_600685_00317_2020_2025_Annual_Reports_2026_Interim.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cssc-defense-financial-report-diagnostics
+          path: out_cssc_defense_financials_20260907/*
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 6
