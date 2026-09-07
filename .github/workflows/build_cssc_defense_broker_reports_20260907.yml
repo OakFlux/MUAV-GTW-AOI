@@ -1,0 +1,55 @@
+name: Build CSSC Offshore Defense broker research report package
+
+on:
+  push:
+    branches:
+      - tmp/cssc-defense-broker-reports-20260907
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install browser and PDF tools
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium
+          python -m pip install --quiet pypdf fonttools
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+
+      - name: Collect public report PDFs
+        run: node tmp/collect_cssc_defense_reports_20260907.mjs
+
+      - name: Validate and package reports
+        run: python tmp/package_cssc_defense_reports_20260907.py
+
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: cssc-defense-600685-00317-broker-deep-reports
+          path: out_cssc_defense_20260907/CSSC_Offshore_Defense_600685_00317_Broker_Deep_Reports.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cssc-defense-report-diagnostics
+          path: out_cssc_defense_20260907/*
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 6
